@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment files (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Supabase
+.supabase/
+
+# Gemini/AI artifacts (local only)
+.gemini/
