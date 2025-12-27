@@ -42,6 +42,10 @@ app.add_middleware(
 )
 client = Together(api_key=TOGETHER_API_KEY)
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 # ==========================================
 # CUSTOM LIGHTWEIGHT SUPABASE CLIENT
 # (Replaces supabase-py to avoid dependency issues)
@@ -56,7 +60,8 @@ class SimpleSupabaseClient:
         }
         
     def table(self, name):
-        return SimpleSupabaseQuery(self.url, self.headers, name)
+        # Create a COPY of headers to avoid pollution
+        return SimpleSupabaseQuery(self.url, dict(self.headers), name)
     
     def rpc(self, name, params):
         url = f"{self.url}/rest/v1/rpc/{name}"
@@ -103,9 +108,7 @@ class SimpleSupabaseQuery:
         
     def limit(self, count):
         self.headers["Range-Unit"] = "items"
-        self.headers["Range"] = f"0-{count-1}" # This is a simplification, but works for limit(1)
-        # Better mapping for specific limit param in PostgREST is usually just limit=x, but Range header is standard too.
-        # Let's use limit param for safety if Range isn't handled well by basic logic. 
+        self.headers["Range"] = f"0-{count-1}" 
         self.params["limit"] = count
         return self
         
@@ -274,6 +277,7 @@ ACTION_MAPPING = {
     "view_my_timesheets": "timesheets",
     "chat": "profiles",
     "greeting": "profiles",
+    "view_my_timesheets": "timesheets",
 }
 
 # ==========================================
@@ -292,12 +296,12 @@ REQUIRED_FIELDS = {
 
 ROLE_PERMISSIONS = {
     "employee": ["mark_attendance", "clock_in", "clock_out", "apply_leave", "view_my_tasks", "update_task_status", "submit_timesheet", "upload_document", "view_payslips", "get_payroll", "raise_support_ticket", "get_tasks", "view_tasks", "show_tasks", "get_balance", "chat", "greeting", "view_my_timesheets"],
-    "team_lead": ["mark_attendance", "clock_in", "clock_out", "apply_leave", "view_my_tasks", "update_task_status", "submit_timesheet", "view_payslips", "get_payroll", "get_tasks", "view_tasks", "show_tasks", "get_balance", "chat", "greeting",
+    "team_lead": ["mark_attendance", "clock_in", "clock_out", "apply_leave", "view_my_tasks", "update_task_status", "submit_timesheet", "view_payslips", "get_payroll", "get_tasks", "view_tasks", "show_tasks", "get_balance", "chat", "greeting", "view_my_timesheets",
                  "view_team_attendance", "get_team_attendance", "get_attendance", "view_team_tasks", "view_team_leaves", "view_team_timesheets", "give_performance_feedback", "approve_timesheet", "raise_correction"],
-    "manager": ["mark_attendance", "clock_in", "clock_out", "apply_leave", "view_my_tasks", "update_task_status", "submit_timesheet", "view_payslips", "get_payroll", "get_tasks", "view_tasks", "show_tasks", "get_balance", "chat", "greeting",
-                "view_team_attendance", "get_team_attendance", "get_attendance", "view_team_tasks", "view_team_leaves", "view_team_timesheets", "view_dept_leaves",
+    "manager": ["mark_attendance", "clock_in", "clock_out", "apply_leave", "view_my_tasks", "update_task_status", "submit_timesheet", "view_payslips", "get_payroll", "get_tasks", "view_tasks", "show_tasks", "get_balance", "chat", "greeting", "view_my_timesheets",
+                "view_team_attendance", "get_team_attendance", "get_attendance", "view_team_tasks", "view_team_leaves", "view_team_timesheets", "view_dept_leaves", "get_pending_leaves", "view_pending_leaves",
                 "add_dept_employee", "add_employee", "create_employee", "manager_approve_leave", "manager_reject_leave", "approve_leave", "reject_leave", "create_team", "assign_team_lead", "assign_task", "create_task", "view_dept_analytics"],
-    "executive": ["mark_attendance", "clock_in", "clock_out", "apply_leave", "view_my_tasks", "update_task_status", "submit_timesheet", "view_payslips", "get_payroll", "get_tasks", "view_tasks", "show_tasks", "get_active_tasks", "view_active_tasks", "view_all_active_tasks", "get_all_tasks", "get_balance", "chat", "greeting",
+    "executive": ["mark_attendance", "clock_in", "clock_out", "apply_leave", "view_my_tasks", "update_task_status", "submit_timesheet", "view_payslips", "get_payroll", "get_tasks", "view_tasks", "show_tasks", "get_active_tasks", "view_active_tasks", "view_all_active_tasks", "get_all_tasks", "get_balance", "chat", "greeting", "view_my_timesheets",
                   "view_team_attendance", "get_team_attendance", "get_attendance", "view_team_tasks", "view_team_leaves", "view_team_timesheets", "give_performance_feedback", "approve_timesheet", "raise_correction",
                   "get_employees", "view_employees", "get_all_employees", "view_all_employees", "get_pending_leaves", "view_pending_leaves", "get_all_leaves", "view_all_leaves",
                   "add_dept_employee", "add_employee", "create_employee", "manager_approve_leave", "manager_reject_leave", "approve_leave", "reject_leave", "create_team", "assign_team_lead", "assign_task", "create_task", "view_dept_analytics",
@@ -326,14 +330,14 @@ def clean_ai_json(text):
     # This is a complex problem to solve with regex but we can try to fix simple cases.
     return text.strip()
 
-# [CRITICAL] Converts Names (e.g., "Akbar") into UUIDs
 def resolve_name_to_id(name):
     if not name or is_valid_uuid(name): return name
     try:
         # Search in profiles by full_name (IlIKE for partial/case-insensitive match)
         res = supabase.table("profiles").select("id").ilike("full_name", f"%{name}%").limit(1).execute()
         if res.data: return res.data[0]['id']
-    except: pass
+    except Exception as e: 
+        print(f"Resolve Error: {e}")
     return None
 
 def normalize_data(raw_data):
@@ -484,14 +488,9 @@ def detect_hard_action(user_text, user_role, logged_in_user_id):
         elif "medium" in lower_text: params["priority"] = "medium"
         elif "low" in lower_text: params["priority"] = "low"
     
-    elif "task" in lower_text and ("show" in lower_text or "view" in lower_text or "my" in lower_text):
-        if "all" in lower_text or "team" in lower_text or "across" in lower_text:
-            action = "view_all_active_tasks" if user_role == "executive" else "view_team_tasks"
-        else:
-            action = "view_my_tasks"
+    # Removed hardcoded view tasks to favor AI SQL
     
-    elif "attendance" in lower_text and ("show" in lower_text or "view" in lower_text or "team" in lower_text):
-        action = "view_team_attendance" if user_role != "employee" else "get_attendance"
+    # Removed hardcoded attendance view to favor AI SQL
 
     elif "payroll" in lower_text or "payslip" in lower_text:
         action = "get_payroll"
@@ -525,8 +524,23 @@ def detect_hard_action(user_text, user_role, logged_in_user_id):
             action = "manager_approve_leave" if "approve" in lower_text else "manager_reject_leave"
         else:
             action = "approve_leave" if "approve" in lower_text else "reject_leave"
-        name_match = re.search(r"(?:approve|reject)\s+(?:leave\s+for\s+)?([a-zA-Z]+)", lower_text)
-        if name_match: params["employee_name"] = name_match.group(1).title()
+        
+        # Robust Name Extraction
+        name_patterns = [
+            r"(?:approve|reject)\s+(?:the\s+)?leave\s+for\s+([a-zA-Z0-9]+)",
+            r"(?:approve|reject)\s+([a-zA-Z0-9]+)'s\s+leave",
+            r"(?:approve|reject)\s+([a-zA-Z0-9]+)"
+        ]
+        for pat in name_patterns:
+            m = re.search(pat, lower_text)
+            if m:
+                extracted = m.group(1)
+                if extracted not in ["the", "leave"]: # filter out common accidental matches
+                    params["employee_name"] = extracted.title()
+                    break
+    
+    elif "leave" in lower_text and "pending" in lower_text:
+        action = "view_pending_leaves"
     
     elif "team" in lower_text and ("add" in lower_text or "create" in lower_text):
         action = "create_team"
@@ -632,9 +646,8 @@ def process_request(json_str, user_text, logged_in_user_id, user_role=None, team
         allowed_actions = ROLE_PERMISSIONS.get(user_role, [])
         
         # [BEHAVIORAL REDIRECT] Team Leads cannot approve leaves
-        is_leave_attempt = any(kw in user_text.lower() for kw in ["leave", "approve", "reject"]) and "timesheet" not in user_text.lower() and "attendance" not in user_text.lower()
-        if user_role == "team_lead" and is_leave_attempt:
-             # Even if the AI didn't parse a JSON 'action', we intercept it here
+        is_leave_modification = any(kw in user_text.lower() for kw in ["approve", "reject"]) and "leave" in user_text.lower()
+        if user_role == "team_lead" and is_leave_modification:
              return f"**Role: Team Lead**\n\nI cannot approve or reject leave requests. As a Team Lead, you manage team attendance and timesheets, but leave approval requires Manager or Executive access. This request has been redirected to the appropriate authority."
 
         role_display = user_role.replace("_", " ").title()
@@ -704,8 +717,9 @@ def process_request(json_str, user_text, logged_in_user_id, user_role=None, team
                     
                     res = query.execute()
                     if len(res.data) > 1:
+                        # Find the best match or show options
                         options = "\n".join([f"- {r.get('title') or r.get('reason')} (ID: {r['id']})" for r in res.data])
-                        return f"I found multiple pending items for that request. Which one should I update?\n{options}"
+                        return f"I found {len(res.data)} pending items for **{target_person}**. Which one should I update?\n{options}"
                     elif res.data: 
                         target_id = res.data[0]['id']
 
@@ -915,23 +929,147 @@ class ChatRequest(BaseModel):
     team_id: str = None
 
 SYSTEM_PROMPT = """SYSTEM PROMPT — TALENTOPS ROLE-BASED CHATBOT BEHAVIOR
+
 You are TalentOps AI Assistant, operating inside a production HRM system.
-You must never guess, invent, or bypass rules. You operate only within defined roles, permissions, and workflows.
 
-🧭 CORE PRINCIPLES (MANDATORY):
-1. Role-first behavior: Every response MUST start by identifying the user role (Executive, Manager, Team Lead, Employee).
-2. Permission enforcement: Validate actions against role rules.
-3. No hallucinations: Only use actual data.
-4. Structured outputs: Command extraction into JSON.
+You must never guess, invent, or bypass rules.
+You operate only within defined roles, permissions, and workflows.
 
-👑 ROLE BEHAVIOR DEFINITIONS:
-1️⃣ Executive: Full visibility. CAN: View all data, add employees/managers, create departments, approve/reject any leave, upload payslips, post announcements, configure policies.
-2️⃣ Manager: Department level authority. CAN: Add employees in department, approve/reject leaves (unless Executive overrides), assign team leads, create teams, assign tasks.
-3️⃣ Team Lead: Team authority. CAN: View team attendance/tasks/leaves/timesheets, give feedback, approve timesheets, raise correction. CANNOT approve leaves (redirect to Manager/Executive).
-4️⃣ Employee: Self-service only. CAN: Mark attendance, apply for leave, view/update own tasks, submit timesheets.
+Your job is to guide users, validate actions, and return structured responses based on their role.
 
-COMMANDS: Output a JSON block with "action" and "data".
-Example: {"action": "create_task", "data": {"title": "...', "assigned_to": "..."}}
+System context is derived from the official TalentOps workflow and architecture documents
+
+🧭 CORE PRINCIPLES (MANDATORY)
+1. Role-first behavior
+Every response MUST start by identifying the user role: **Role: [Role Name]**
+2. Permission enforcement
+3. No hallucinations
+4. Structured outputs
+
+👑 ROLE BEHAVIOR DEFINITIONS
+
+1️⃣ Executive (Highest Authority)
+Executives have full system visibility and control.
+They CAN:
+* View all company data (attendance, leaves, tasks, payroll, analytics)
+* Add employees, managers, team leads
+* Create departments and assign managers
+* Approve/reject any leave (final authority)
+* Upload payslips
+* Post company-wide announcements
+* Configure policies, roles, integrations
+* Access AI insights (analytics, hiring, performance)
+
+They CANNOT:
+* Be overridden by Managers or Team Leads or employee
+
+Your behavior:
+* Provide company-wide summaries
+* Allow direct execution of admin actions
+* Ask confirmations for critical changes (policy, payroll, role change)
+
+2️⃣ Manager (Department Authority)
+Managers operate at department level, not system level.
+They CAN:
+* Add employees within their department
+* Approve/reject leaves (unless Executive overrides)
+* Assign team leads
+* Create teams
+* Assign tasks
+* View department analytics
+* Participate in hiring and performance reviews
+* View payslips
+
+They CANNOT:
+* Create departments
+* Change executive/manager roles
+* Modify global policies
+
+Your behavior:
+* Restrict data to department scope
+* Clearly mention when Executive approval can override
+
+3️⃣ Team Lead (Team Authority)
+Team Leads manage only their assigned team.
+They CAN:
+* View team attendance, tasks, leaves, timesheets
+* Give performance feedback
+* Approve timesheets
+* Raise correction requests
+* View payslips
+
+They CANNOT:
+* Approve leaves
+* View payroll
+* Change roles or policies
+
+Your behavior:
+* Show team-only data
+* When leave approval is asked → redirect to Manager/Executive
+
+4️⃣ Employee (Self-Service Only)
+Employees can access only their own data.
+They CAN:
+* Mark attendance
+* Apply for leave
+* View tasks and update status
+* Submit timesheets
+* Upload documents
+* View payslips
+* Raise support tickets
+
+They CANNOT:
+* View team or company data
+* Approve anything
+* Assign tasks
+
+Your behavior:
+* Keep responses simple and direct
+* Guide step-by-step for self-actions
+* Never expose other employees’ data
+
+🔄 WORKFLOW AWARENESS (MANDATORY)
+You must respect these flows:
+* Attendance → Insert → Realtime update → Notifications
+* Leave → Apply → Notify TL/Manager/Executive → Approve/Reject
+* Tasks → Assign → Update → Realtime sync
+* Payroll → Executive upload → Employee view only
+* Announcements → Executive/Manager → Broadcast
+
+If a user skips steps → stop and correct them
+
+🤖 CHATBOT RESPONSE RULES
+When responding:
+1. Identify role
+2. Validate permission
+3. Confirm required inputs
+4. Explain next action or result
+5. Return clear status
+
+🛑 ABSOLUTE RESTRICTIONS
+* Do NOT act like a general chatbot
+* Do NOT provide opinions
+* Do NOT explain internal system design unless asked
+* Do NOT assume missing data
+
+✅ FINAL IDENTITY
+You are not a chatbot.
+You are a role-governed operational assistant inside TalentOps.
+
+Your success is measured by:
+* Correct permissions
+* Zero hallucinations
+* Clear execution guidance
+* Enterprise-grade behavior
+
+* Use clear steps, confirmations, or status messages
+* No casual language, no storytelling
+* If required data is missing → ask for it
+* If action is undefined → say “This action is not supported”
+* If a user asks for an action outside their role → BLOCK and explain why
+* Never suggest workarounds
+
+Roles: Executive, Manager, Team Lead, Employee.
 """
 
 @app.post("/chat")
@@ -944,10 +1082,9 @@ async def chat_endpoint(req: ChatRequest):
         
         # [CRITICAL] BEHAVIORAL REDIRECT: Team Leads cannot approve leaves
         # This is the primary entry point for behavior enforcement.
-        is_leave_attempt = any(kw in req.message.lower() for kw in ["leave", "approve", "reject"]) and \
-                            "timesheet" not in req.message.lower() and "attendance" not in req.message.lower()
-        if req.role == "team_lead" and is_leave_attempt:
-            return {"response": f"**Role: Team Lead**\n\nI cannot approve or reject leave requests. As a Team Lead, you manage team attendance and timesheets, but leave approval requires Manager or Executive access. This request has been redirected to the appropriate authority."}
+        is_leave_modification = any(kw in req.message.lower() for kw in ["approve", "reject"]) and "leave" in req.message.lower()
+        if req.role == "team_lead" and is_leave_modification:
+            return {"message": f"**Role: Team Lead**\n\nI cannot approve or reject leave requests. As a Team Lead, you manage team attendance and timesheets, but leave approval requires Manager or Executive access. This request has been redirected to the appropriate authority."}
 
         # 1. Topic Guardrail
         # --- NEW CONSOLIDATED LOGIC ---
@@ -955,7 +1092,7 @@ async def chat_endpoint(req: ChatRequest):
         # 1. Guardrails Check
         is_safe, warning_msg = guardrails.validate_input(req.message)
         if not is_safe:
-            return {"response": warning_msg}
+            return {"message": warning_msg}
         
         # Phase 0: Hard Action Detection (Unambiguous Commands)
         hard_action, hard_params = detect_hard_action(req.message, req.role, req.user_id)
@@ -965,7 +1102,7 @@ async def chat_endpoint(req: ChatRequest):
             role_display = req.role.replace("_", " ").title()
             if not result.startswith("**Role:"):
                 result = f"**Role: {role_display}**\n\n{result}"
-            return {"response": result}
+            return {"message": result}
 
         # Phase 1: AI Intent Detection
         sql_prompt = sql_gen.generate_sql_prompt(req.role, req.user_id, req.team_id, req.message)
@@ -981,15 +1118,15 @@ async def chat_endpoint(req: ChatRequest):
             
             if not action_name:
                 role_display = req.role.replace("_", " ").title()
-                return {"response": f"**Role: {role_display}**\n\nI'm ready to help, but I couldn't determine the exact action to take. Could you please provide more details?"}
+                return {"message": f"**Role: {role_display}**\n\nI'm ready to help, but I couldn't determine the exact action to take. Could you please provide more details?"}
             
             # Special case for "chat" or "need_info"
             if action_name == "chat":
-                return {"response": action_params.get("response", "Hello!")}
+                return {"message": action_params.get("response", "Hello!")}
             if action_name == "need_info":
-                return {"response": logic_output.get("question", "I need more info.")}
+                return {"message": logic_output.get("question", "I need more info.")}
             if action_name == "forbidden":
-                return {"response": logic_output.get("message", "Permission denied.")}
+                return {"message": logic_output.get("message", "Permission denied.")}
 
             # Map to process_request format
             json_sim = json.dumps({"action": action_name, "data": action_params})
@@ -999,7 +1136,7 @@ async def chat_endpoint(req: ChatRequest):
             role_display = req.role.replace("_", " ").title()
             if not result.startswith("**Role:"):
                 result = f"**Role: {role_display}**\n\n{result}"
-            return {"response": result}
+            return {"message": result}
             
         # 4. Handle Data Queries (SELECT)
         elif isinstance(logic_output, str) and logic_output.strip().upper().startswith("SELECT"):
@@ -1009,16 +1146,39 @@ async def chat_endpoint(req: ChatRequest):
             
             role_display = req.role.replace("_", " ").title()
             if not data:
-                return {"response": f"**Role: {role_display}**\n\nI couldn't find any records matching that request."}
+                return {"message": f"**Role: {role_display}**\n\nI couldn't find any records matching that request."}
             
             # Sanitize output (remove sensitive fields)
             safe_data = guardrails.sanitize_output(data)
             
             # Natural Language Answer Generation
-            summary_prompt = f"Role: {req.role}, User Context: {req.user_id}. Based on this data: {json.dumps(safe_data[:5])}, answer the user's question: '{req.message}'. Be concise and professional."
-            summary_raw = client.chat.completions.create(model=FINE_TUNED_MODEL_NAME, messages=[{"role": "user", "content": summary_prompt}], temperature=0.0)
             
-            return {"response": f"**Role: {role_display}**\n\n{summary_raw.choices[0].message.content}"}
+            # Deduplicate by full_name or employee_id if available
+            unique_data = []
+            seen_ids = set()
+            for item in data:
+                uid = item.get('employee_id') or item.get('id') or item.get('full_name')
+                if uid not in seen_ids:
+                    unique_data.append(item)
+                    seen_ids.add(uid)
+            
+            # If it's just a count, we can simplify/force it
+            if len(data) == 1 and ('count' in data[0] or 'COUNT' in data[0]):
+                count = data[0].get('count') or data[0].get('COUNT')
+                summary = f"There are {count} employees {req.message.replace('how many', '').replace('people', '').replace('are', '').strip()}."
+            else:
+                summary_prompt = f"The following data points are the filtered results for the user's question.\nData: {json.dumps(unique_data[:10])}\nQuestion: {req.message}"
+                summary_raw = client.chat.completions.create(
+                    model=FINE_TUNED_MODEL_NAME, 
+                    messages=[
+                        {"role": "system", "content": "You are a factual operational assistant. The provided data is the DIRECT result of a database query for the user's question. Answer the question in a complete, direct sentence using ONLY this data. If names are present, they are the people who match the user's request. No 'Based on data' or 'The data shows'. 1-3 sentences maximum."},
+                        {"role": "user", "content": summary_prompt}
+                    ], 
+                    temperature=0.0
+                )
+                summary = summary_raw.choices[0].message.content
+            
+            return {"message": f"**Role: {role_display}**\n\n{summary}"}
 
         # 5. Fallback to old Action Extraction logic
         ai_response = client.chat.completions.create(model=FINE_TUNED_MODEL_NAME, messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": req.message}], temperature=0.0)
@@ -1027,7 +1187,7 @@ async def chat_endpoint(req: ChatRequest):
         role_display = req.role.replace("_", " ").title()
         if not result.startswith("**Role:"):
             result = f"**Role: {role_display}**\n\n{result}"
-        return {"response": result}
+        return {"message": result}
 
     except Exception as e:
         print(f"CHAT ERROR: {e}")

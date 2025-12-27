@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, MessageSquare, X, Move, Loader } from 'lucide-react';
 import { supabase } from '../../../../lib/supabaseClient';
 
-const CHATBOT_API_URL = 'http://localhost:8000/chat';
+const CHATBOT_API_URL = 'http://localhost:8035/chat';
 
 const Chatbot = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -68,12 +68,12 @@ const Chatbot = () => {
 
         try {
             // Check if backend is running
-            const healthCheck = await fetch('http://localhost:8000/health').catch(() => null);
+            const healthCheck = await fetch('http://localhost:8035/health').catch(() => null);
 
             if (!healthCheck || !healthCheck.ok) {
                 setMessages(prev => [...prev, {
                     role: 'ai',
-                    text: '⚠️ Chatbot backend is not running. Please start the backend server first.\n\nTo start:\n1. Open terminal in chatbot-backend folder\n2. Run: python main.py\n3. Wait for "Running on http://localhost:8000"'
+                    text: '⚠️ Chatbot backend is not running. Please start the backend server first.\n\nTo start:\n1. Open terminal in slm-backend folder\n2. Run: python server.py\n3. Wait for "Running on http://localhost:8035"'
                 }]);
                 setIsLoading(false);
                 return;
@@ -123,7 +123,7 @@ const Chatbot = () => {
             console.error('Chatbot error:', error);
             setMessages(prev => [...prev, {
                 role: 'ai',
-                text: `❌ Error: ${error.message}\n\nMake sure the chatbot backend is running on http://localhost:5000`
+                text: `❌ Error: ${error.message}\n\nMake sure the chatbot backend is running on http://localhost:8035`
             }]);
         } finally {
             setIsLoading(false);
