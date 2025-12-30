@@ -199,14 +199,14 @@ const AnnouncementsPage = ({ userRole, userId }) => {
 
                     if (teamIds.length > 0) {
                         const { data: teams } = await supabase
-                            .from('teams')
-                            .select('team_name')
+                            .from('projects')
+                            .select('name')
                             .in('id', teamIds);
 
                         if (teams) {
                             setEventParticipants({
                                 loading: false,
-                                names: teams.map(t => t.team_name),
+                                names: teams.map(t => t.name),
                                 type: 'team'
                             });
                         }
@@ -253,9 +253,9 @@ const AnnouncementsPage = ({ userRole, userId }) => {
             if (!isAuthorized) return;
             setLoadingOptions(true);
             try {
-                // Fetch Teams
-                const { data: teams } = await supabase.from('teams').select('id, team_name');
-                if (teams) setAllTeams(teams.map(t => ({ id: t.id, name: t.team_name })));
+                // Fetch Projects (instead of teams)
+                const { data: teams } = await supabase.from('projects').select('id, name');
+                if (teams) setAllTeams(teams.map(t => ({ id: t.id, name: t.name })));
 
                 // Fetch Employees
                 const { data: emps } = await supabase.from('profiles').select('id, full_name, team_id');
@@ -762,7 +762,7 @@ const AnnouncementsPage = ({ userRole, userId }) => {
                                                 onChange={() => setEventScope('team')}
                                                 style={{ accentColor: '#3b82f6' }}
                                             />
-                                            Specific Team(s)
+                                            Specific Project(s)
                                         </label>
                                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
                                             <input
@@ -788,7 +788,7 @@ const AnnouncementsPage = ({ userRole, userId }) => {
                                                 onChange={() => { setEventScope('my_team'); setSelectedEmployees([]); }}
                                                 style={{ accentColor: '#3b82f6' }}
                                             />
-                                            My Team
+                                            My Project
                                         </label>
                                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
                                             <input
@@ -821,7 +821,7 @@ const AnnouncementsPage = ({ userRole, userId }) => {
                                             />
                                             {team.name}
                                         </label>
-                                    )) : <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No teams found</p>}
+                                    )) : <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No projects found</p>}
                                 </div>
                             )}
 

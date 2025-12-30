@@ -132,31 +132,33 @@ const ModulePage = ({ title, type }) => {
             try {
                 console.log('Fetching team members for teamId:', teamId);
 
-                // 1. Fetch profiles directly (no join)
-                const { data: profiles, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('team_id', teamId);
+                // 1. Fetch team members from project_members table joined with profiles
+                const { data: assignments, error: assignmentError } = await supabase
+                    .from('project_members')
+                    .select('*, profiles:user_id(id, full_name, role, email, phone, location, created_at)')
+                    .eq('project_id', teamId);
 
-                console.log('Profiles fetched:', profiles, 'Error:', profileError);
+                console.log('Assignments fetched:', assignments, 'Error:', assignmentError);
 
-                if (profileError) throw profileError;
+                if (assignmentError) throw assignmentError;
 
-                if (!profiles || profiles.length === 0) {
-                    console.log('No profiles found for teamId:', teamId);
+                if (!assignments || assignments.length === 0) {
+                    console.log('No members found for project:', teamId);
                     setTeamMembers([]);
                     return;
                 }
 
-                // 2. Fetch team name separately
+                const profiles = assignments.map(a => a.profiles).filter(Boolean);
+
+                // 2. Fetch team name separately (from projects table)
                 let teamName = 'Unassigned';
-                const { data: teamData } = await supabase
-                    .from('teams')
-                    .select('team_name')
+                const { data: projectData } = await supabase
+                    .from('projects')
+                    .select('name')
                     .eq('id', teamId)
                     .single();
 
-                if (teamData) teamName = teamData.team_name;
+                if (projectData) teamName = projectData.name;
 
                 const today = new Date().toISOString().split('T')[0];
 
@@ -231,13 +233,16 @@ const ModulePage = ({ title, type }) => {
             try {
                 console.log('📥 Fetching team status for teamId:', teamId);
 
-                // Fetch team members
-                const { data: profiles, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('team_id', teamId);
+                // Fetch team members from project_members table
+                // Explicitly select profile fields to avoid potential issues with dropped columns
+                const { data: assignments, error: assignmentError } = await supabase
+                    .from('project_members')
+                    .select('*, profiles:user_id(id, full_name, email, role)')
+                    .eq('project_id', teamId);
 
-                if (profileError) throw profileError;
+                if (assignmentError) throw assignmentError;
+
+                const profiles = assignments.map(a => a.profiles).filter(Boolean);
 
                 console.log('👥 Profiles fetched:', profiles);
 
@@ -247,15 +252,15 @@ const ModulePage = ({ title, type }) => {
                     return;
                 }
 
-                // Fetch team name
+                // Fetch team name (from Projects table)
                 let teamName = 'Unassigned';
-                const { data: teamData } = await supabase
-                    .from('teams')
-                    .select('team_name')
+                const { data: projectData } = await supabase
+                    .from('projects')
+                    .select('name')
                     .eq('id', teamId)
                     .single();
 
-                if (teamData) teamName = teamData.team_name;
+                if (projectData) teamName = projectData.name;
 
                 const today = new Date().toISOString().split('T')[0];
                 console.log('📅 Fetching attendance for date:', today);

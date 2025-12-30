@@ -24,10 +24,10 @@ export const UserProvider = ({ children }) => {
                 if (user) {
                     setUserId(user.id);
 
-                    // Fetch user's profile to get full_name, role, and team_id
+                    // Fetch user's profile
                     const { data: profile, error } = await supabase
                         .from('profiles')
-                        .select('full_name, email, role, team_id')
+                        .select('full_name, email, role')
                         .eq('id', user.id)
                         .single();
 
@@ -42,7 +42,15 @@ export const UserProvider = ({ children }) => {
                     if (profile) {
                         setUserName(profile.full_name || profile.email || 'User');
                         setUserRole(profile.role || 'User');
-                        setTeamId(profile.team_id || null);
+
+                        // Fetch project assignment to replace deprecated team_id
+                        const { data: projectMember } = await supabase
+                            .from('project_members')
+                            .select('project_id')
+                            .eq('user_id', user.id)
+                            .maybeSingle();
+
+                        setTeamId(projectMember?.project_id || null);
                     }
                 } else {
                     setUserName('Guest');

@@ -13,45 +13,70 @@ interface Team {
     name: string;
 }
 
+interface Project {
+    id: string;
+    name: string;
+}
+
+interface Department {
+    id: string;
+    department_name: string;
+}
+
 export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose, onSuccess }) => {
+    console.log('🔵 AddEmployeeModal rendered, isOpen:', isOpen);
     const [loading, setLoading] = useState(false);
-    const [teams, setTeams] = useState<Team[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [departments, setDepartments] = useState<Department[]>([]);
+    const [selectedProjects, setSelectedProjects] = useState<string[]>([]); // Array of project IDs
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
         password: '',
         role: 'employee',
-        team_id: '',
-        newTeamName: '',
+        department_id: '', // Added department_id
         monthly_leave_quota: 3,
         basic_salary: '',
         hra: '',
         allowances: '',
+        joinDate: new Date().toISOString().split('T')[0],
     });
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (isOpen) {
-            fetchTeams();
+            fetchProjects();
+            fetchDepartments();
         }
     }, [isOpen]);
 
-    const fetchTeams = async () => {
-        console.log('Fetching teams...');
+    const fetchDepartments = async () => {
+        console.log('Fetching departments...');
         const { data, error } = await supabase
-            .from('teams')
-            .select('id, team_name');
+            .from('departments')
+            .select('id, department_name')
+            .order('department_name');
 
         if (error) {
-            console.error('Error fetching teams:', error);
+            console.error('Error fetching departments:', error);
         } else {
-            console.log('Teams fetched:', data);
-            // Map team_name to name for consistency
-            const mappedTeams = data?.map(team => ({
-                id: team.id,
-                name: team.team_name
-            })) || [];
-            setTeams(mappedTeams);
+            console.log('Departments fetched:', data);
+            setDepartments(data || []);
+        }
+    };
+
+    const fetchProjects = async () => {
+        console.log('Fetching projects...');
+        const { data, error } = await supabase
+            .from('projects')
+            .select('id, name')
+            .order('name');
+
+        if (error) {
+            console.error('Error fetching projects:', error);
+        } else {
+            console.log('Projects fetched:', data);
+            setProjects(data || []);
         }
     };
 
@@ -61,25 +86,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
         setLoading(true);
 
         try {
-            let teamId = formData.team_id;
-
-            // If creating a new team, create it first
-            if (formData.team_id === 'new' && formData.newTeamName) {
-                const { data: newTeam, error: teamError } = await supabase
-                    .from('teams')
-                    .insert([{ team_name: formData.newTeamName }])
-                    .select()
-                    .single();
-
-                if (teamError) {
-                    throw new Error(`Failed to create team: ${teamError.message}`);
-                }
-
-                teamId = newTeam.id;
-            } else if (formData.team_id === 'new') {
-                throw new Error('Please enter a team name');
-            }
-
             // Get the current session token
             const { data: { session } } = await supabase.auth.getSession();
 
@@ -92,7 +98,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                 full_name: formData.full_name,
                 email: formData.email,
                 role: formData.role,
-                team_id: teamId || null,
+                project_id: selectedProjects[0] || null,
                 monthly_leave_quota: formData.monthly_leave_quota,
             });
 
@@ -109,11 +115,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                         email: formData.email,
                         password: formData.password,
                         role: formData.role,
-                        team_id: teamId || null,
                         monthly_leave_quota: formData.monthly_leave_quota,
                         basic_salary: parseFloat(formData.basic_salary),
                         hra: parseFloat(formData.hra),
                         allowances: parseFloat(formData.allowances) || 0,
+                        join_date: formData.joinDate,
                     }),
                 }
             );
@@ -132,19 +138,88 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                 throw new Error(result.error || result.message || `Server error: ${response.status}`);
             }
 
+            // If a project was selected, add the user to project_members
+            if (selectedProjects.length > 0) {
+                console.log('Adding user to project_members...');
+
+                // Get the user_id - either from the response or by querying
+                let userId = result.user_id;
+
+                if (!userId) {
+                    // Query for the newly created user by email
+                    const { data: profileData, error: profileError } = await supabase
+                        .from('profiles')
+                        .select('id')
+                        .eq('email', formData.email)
+                        .single();
+
+                    if (profileError) {
+                        console.error('Error fetching user profile:', profileError);
+                    } else {
+                        userId = profileData?.id;
+                    }
+                }
+
+                if (userId) {
+                    // Update profile with department if selected
+                    // Update profile with department and join date
+                    if (formData.department_id || formData.joinDate) {
+                        const updateData: any = {};
+                        if (formData.department_id) updateData.department = formData.department_id;
+                        if (formData.joinDate) updateData.join_date = formData.joinDate;
+
+                        console.log('Updating profile for user:', userId, 'with data:', updateData);
+                        const { data: updateResult, error: updateError } = await supabase
+                            .from('profiles')
+                            .update(updateData)
+                            .eq('id', userId)
+                            .select();
+
+                        if (updateError) {
+                            console.error('FAILED to update profile:', updateError);
+                            setError(`Failed to update profile details: ${updateError.message}`);
+                        } else {
+                            console.log('Profile updated successfully:', updateResult);
+                        }
+                    }
+
+                    // Add to all selected projects
+                    const projectAssignments = selectedProjects.map(projectId => ({
+                        project_id: projectId,
+                        user_id: userId,
+                        role: formData.role
+                    }));
+
+                    const { error: projectMemberError } = await supabase
+                        .from('project_members')
+                        .insert(projectAssignments);
+
+                    if (projectMemberError) {
+                        console.error('Error adding to project_members:', projectMemberError);
+                        // Don't throw, just log - user was created successfully
+                    } else {
+                        console.log('Successfully added to project_members');
+                    }
+
+                } else {
+                    console.error('Could not determine user_id for project mapping');
+                }
+            }
+
             // Reset form
             setFormData({
                 full_name: '',
                 email: '',
                 password: '',
                 role: 'employee',
-                team_id: '',
-                newTeamName: '',
+                department_id: '',
                 monthly_leave_quota: 3,
                 basic_salary: '',
                 hra: '',
                 allowances: '',
+                joinDate: new Date().toISOString().split('T')[0],
             });
+            setSelectedProjects([]);
 
             onSuccess();
             onClose();
@@ -307,18 +382,106 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                             </select>
                         </div>
 
-                        {/* Team */}
+                        {/* Role and Project - Side by Side */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
+                            {/* Role (moved here for better layout) */}
+                            {/* This is handled above, so we'll add Project here */}
+                        </div>
+
+                        {/* Department */}
                         <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
-                                Team
+                                Department *
                             </label>
                             <select
-                                value={formData.team_id}
+                                required
+                                value={formData.department_id}
+                                onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                    backgroundColor: 'var(--background)',
+                                    color: 'var(--text-primary)',
+                                }}
+                            >
+                                <option value="">Select Department</option>
+                                {departments.map((dept) => (
+                                    <option key={dept.id} value={dept.id}>
+                                        {dept.department_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Projects - Multi-select */}
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
+                                Projects (Select Multiple)
+                            </label>
+
+                            <div style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '8px',
+                                marginBottom: '12px',
+                                minHeight: '40px',
+                                padding: '8px',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border)',
+                                backgroundColor: 'var(--background)',
+                            }}>
+                                {selectedProjects.length === 0 ? (
+                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                        No projects selected
+                                    </span>
+                                ) : (
+                                    selectedProjects.map(projectId => {
+                                        const project = projects.find(p => p.id === projectId);
+                                        return project ? (
+                                            <div
+                                                key={projectId}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    padding: '6px 12px',
+                                                    borderRadius: '6px',
+                                                    backgroundColor: 'var(--primary)',
+                                                    color: 'white',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 500,
+                                                }}
+                                            >
+                                                {project.name}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedProjects(selectedProjects.filter(id => id !== projectId))}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: 'white',
+                                                        cursor: 'pointer',
+                                                        padding: '0',
+                                                        fontSize: '1.2rem',
+                                                        lineHeight: '1',
+                                                        marginLeft: '4px',
+                                                    }}
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ) : null;
+                                    })
+                                )}
+                            </div>
+
+                            <select
+                                value=""
                                 onChange={(e) => {
-                                    const value = e.target.value;
-                                    setFormData({ ...formData, team_id: value });
-                                    if (value !== 'new') {
-                                        setFormData(prev => ({ ...prev, newTeamName: '' }));
+                                    if (e.target.value && !selectedProjects.includes(e.target.value)) {
+                                        setSelectedProjects([...selectedProjects, e.target.value]);
                                     }
                                 }}
                                 style={{
@@ -330,39 +493,37 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                                     color: 'var(--text-primary)',
                                 }}
                             >
-                                <option value="">No Team</option>
-                                {teams.map((team) => (
-                                    <option key={team.id} value={team.id}>
-                                        {team.name}
-                                    </option>
-                                ))}
-                                <option value="new">+ Create New Team</option>
+                                <option value="">+ Add Project</option>
+                                {projects
+                                    .filter(project => !selectedProjects.includes(project.id))
+                                    .map((project) => (
+                                        <option key={project.id} value={project.id}>
+                                            {project.name}
+                                        </option>
+                                    ))}
                             </select>
                         </div>
 
-                        {/* New Team Name (shown only when "Create New Team" is selected) */}
-                        {formData.team_id === 'new' && (
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
-                                    New Team Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formData.newTeamName || ''}
-                                    onChange={(e) => setFormData({ ...formData, newTeamName: e.target.value })}
-                                    placeholder="Enter team name..."
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px',
-                                        borderRadius: '8px',
-                                        border: '1px solid var(--border)',
-                                        backgroundColor: 'var(--background)',
-                                        color: 'var(--text-primary)',
-                                    }}
-                                />
-                            </div>
-                        )}
+                        {/* Join Date */}
+                        <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
+                                Join Date *
+                            </label>
+                            <input
+                                type="date"
+                                required
+                                value={formData.joinDate}
+                                onChange={(e) => setFormData({ ...formData, joinDate: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                    backgroundColor: 'var(--background)',
+                                    color: 'var(--text-primary)',
+                                }}
+                            />
+                        </div>
 
                         {/* Monthly Leave Quota */}
                         <div>
@@ -503,3 +664,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
         </div>
     );
 };
+
+
+
+
+
+

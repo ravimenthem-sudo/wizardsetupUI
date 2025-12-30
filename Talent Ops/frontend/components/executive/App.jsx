@@ -5,6 +5,7 @@ import DashboardHome from './pages/DashboardHome';
 import ModulePage from './pages/ModulePage';
 import NotificationsPage from '../shared/NotificationsPage';
 import MessagingHub from '../shared/MessagingHub';
+import AllTasksView from '../shared/AllTasksView';
 import { ToastProvider } from './context/ToastContext';
 import { UserProvider } from './context/UserContext';
 
@@ -19,7 +20,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardHome />} />
               <Route path="/analytics" element={<ModulePage title="Analytics" type="analytics" />} />
               <Route path="/employees" element={<ModulePage title="Employees" type="workforce" />} />
-              <Route path="/tasks" element={<ModulePage title="Task Executive" type="tasks" />} />
+              <Route path="/tasks" element={<AllTasksView userRole="executive" />} />
               <Route path="/leaves" element={<ModulePage title="Leave Requests" type="leaves" />} />
               <Route path="/leaves" element={<ModulePage title="Leave Requests" type="leaves" />} />
               <Route path="/employee-status" element={<ModulePage title="Employee Status" type="status" />} />
@@ -28,7 +29,7 @@ function App() {
               <Route path="/messages" element={<MessagingHub />} />
               <Route path="/executive-dashboard/messages" element={<MessagingHub />} />
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/hierarchy" element={<ModulePage title="Team Hierarchy" type="default" />} />
+              <Route path="/hierarchy" element={<ModulePage title="Organizational Hierarchy" type="default" />} />
               <Route path="/audit" element={<ModulePage title="Audit Logs" type="default" />} />
               <Route path="/settings" element={<ModulePage title="Settings" type="default" />} />
               <Route path="/project-analytics" element={<ModulePage title="Project Analytics" type="project-analytics" />} />

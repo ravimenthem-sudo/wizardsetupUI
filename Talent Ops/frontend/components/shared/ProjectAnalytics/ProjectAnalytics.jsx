@@ -48,10 +48,10 @@ const ProjectAnalytics = ({ userRole = 'manager', dashboardPrefix = '/manager-da
 
             // Try fetching with all analytics columns first
             let { data, error } = await supabase
-                .from('teams')
+                .from('projects')
                 .select(`
                     id,
-                    team_name,
+                    name,
                     description,
                     status,
                     start_date,
@@ -59,17 +59,17 @@ const ProjectAnalytics = ({ userRole = 'manager', dashboardPrefix = '/manager-da
                     total_budget,
                     total_revenue,
                     total_cost,
-                    manager_id
+                    owner_id
                 `)
-                .order('team_name');
+                .order('name');
 
             // If error (likely missing columns), fallback to basic query
             if (error) {
                 console.warn('Full query failed, trying basic query:', error.message);
                 const basicResult = await supabase
-                    .from('teams')
-                    .select('id, team_name')
-                    .order('team_name');
+                    .from('projects')
+                    .select('id, name')
+                    .order('name');
 
                 data = basicResult.data;
                 error = basicResult.error;
@@ -77,29 +77,29 @@ const ProjectAnalytics = ({ userRole = 'manager', dashboardPrefix = '/manager-da
                 if (error) throw error;
             }
 
-            // Fetch member counts and manager names for each team
+            // Fetch member counts and owner names for each project
             const projectsWithMembers = await Promise.all(
                 (data || []).map(async (project) => {
-                    // Get member count from profiles table (members are linked via team_id)
+                    // Get member count from project_members table (members are linked via project_id)
                     const { count } = await supabase
-                        .from('profiles')
+                        .from('project_members')
                         .select('*', { count: 'exact', head: true })
-                        .eq('team_id', project.id);
+                        .eq('project_id', project.id);
 
-                    // Get manager name if manager_id exists
+                    // Get owner name if owner_id exists
                     let managerName = 'Unassigned';
-                    if (project.manager_id) {
-                        const { data: managerData } = await supabase
+                    if (project.owner_id) {
+                        const { data: ownerData } = await supabase
                             .from('profiles')
                             .select('full_name')
-                            .eq('id', project.manager_id)
+                            .eq('id', project.owner_id)
                             .single();
-                        managerName = managerData?.full_name || 'Unassigned';
+                        managerName = ownerData?.full_name || 'Unassigned';
                     }
 
                     return {
                         ...project,
-                        name: project.team_name,
+                        name: project.name,
                         description: project.description || '',
                         status: project.status || 'active',
                         start_date: project.start_date || null,
@@ -179,7 +179,7 @@ const ProjectAnalytics = ({ userRole = 'manager', dashboardPrefix = '/manager-da
             const newCost = parseFloat(financialForm.salary_cost) + parseFloat(financialForm.other_costs) || 0;
 
             await supabase
-                .from('teams')
+                .from('projects')
                 .update({
                     total_revenue: (selectedProject.total_revenue || 0) + newRevenue,
                     total_cost: (selectedProject.total_cost || 0) + newCost,
@@ -449,31 +449,33 @@ const ProjectAnalytics = ({ userRole = 'manager', dashboardPrefix = '/manager-da
         const fetchProjectDetails = async () => {
             setLoadingDetails(true);
             try {
-                // Debug: Log the project ID we're fetching for
-                console.log('Fetching team members for project:', selectedProject.id, selectedProject.name);
-
-                // Fetch team members from profiles table (directly linked via team_id)
-                // Only select columns that definitely exist
-                const { data: profileMembers, error: profilesError } = await supabase
-                    .from('profiles')
-                    .select(`id, full_name, email, role`)
-                    .eq('team_id', selectedProject.id);
+                // Fetch project members from project_members table joined with profiles
+                const { data: memberAssignments, error: memberError } = await supabase
+                    .from('project_members')
+                    .select(`
+                        id,
+                        user_id,
+                        role,
+                        joined_at,
+                        profiles:user_id(id, full_name, email, role)
+                    `)
+                    .eq('project_id', selectedProject.id);
 
                 // Debug: Log query results
-                console.log('Profile members query result:', { profileMembers, profilesError });
+                console.log('Project members query result:', { memberAssignments, memberError });
 
-                if (profilesError) {
-                    console.error('Error fetching team members:', profilesError);
+                if (memberError) {
+                    console.error('Error fetching project members:', memberError);
                 }
 
-                // Map profiles to expected member format for the component
-                const members = (profileMembers || []).map(profile => ({
-                    id: profile.id,
-                    profile_id: profile.id,
-                    assignment_start: selectedProject.start_date || new Date().toISOString().split('T')[0],
+                // Map assignments to expected member format
+                const members = (memberAssignments || []).map(assignment => ({
+                    id: assignment.id,
+                    profile_id: assignment.user_id,
+                    assignment_start: assignment.joined_at || selectedProject.start_date || new Date().toISOString().split('T')[0],
                     assignment_end: null, // Ongoing
-                    role_in_project: profile.role?.toLowerCase() || 'other',
-                    profiles: profile
+                    role_in_project: assignment.role?.toLowerCase() || 'other',
+                    profiles: assignment.profiles
                 }));
 
                 console.log('Mapped members:', members);

@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import AnalyticsDemo from '../components/Demo/AnalyticsDemo';
 import KanbanDemo from '../components/Demo/KanbanDemo';
 import TaskLifecyclePage from '../../shared/TaskLifecyclePage';
-import ManagerTaskDashboard from '../../shared/ManagerTaskDashboard';
+import AllTasksView from '../../shared/AllTasksView';
 import HierarchyDemo from '../components/Demo/HierarchyDemo';
 import SettingsDemo from '../components/Demo/SettingsDemo';
 import AuditLogsDemo from '../components/Demo/AuditLogsDemo';
@@ -65,7 +65,8 @@ const ModulePage = ({ title, type }) => {
         const fetchData = async () => {
             try {
                 if (type === 'workforce') {
-                    const { data, error } = await supabase
+                    // 1. Fetch all profiles
+                    const { data: profilesData, error: profileError } = await supabase
                         .from('profiles')
                         .select(`
                             id, 
@@ -79,29 +80,50 @@ const ModulePage = ({ title, type }) => {
                             )
                         `);
 
-                    if (data) {
-                        setEmployees(data.map(emp => ({
+                    if (profileError) throw profileError;
+
+                    // 2. Fetch project assignments from project_members
+                    const { data: assignments } = await supabase
+                        .from('project_members')
+                        .select('user_id, projects:project_id(name)');
+
+                    const projectMap = {};
+                    if (assignments) {
+                        assignments.forEach(a => {
+                            projectMap[a.user_id] = a.projects?.name;
+                        });
+                    }
+
+                    if (profilesData) {
+                        setEmployees(profilesData.map(emp => ({
                             id: emp.id,
                             name: emp.full_name || 'N/A',
                             email: emp.email || 'N/A',
                             role: emp.role || 'N/A',
-                            dept: emp.teams?.team_name || 'Unassigned',
-                            status: 'Active', // Placeholder
+                            dept: projectMap[emp.id] || emp.teams?.team_name || 'Unassigned',
+                            status: 'Active',
                             joinDate: emp.created_at ? new Date(emp.created_at).toLocaleDateString() : 'N/A'
                         })));
                     }
                 } else if (type === 'status') {
-                    // Fetch profiles with team information
+                    // Fetch profiles
                     const { data: profiles, error: profileError } = await supabase
                         .from('profiles')
-                        .select(`
-                            id,
-                            full_name,
-                            team_id,
-                            teams!team_id (
-                                team_name
-                            )
-                        `);
+                        .select('id, full_name');
+
+                    if (profileError) throw profileError;
+
+                    // Fetch project assignments from project_members
+                    const { data: assignments } = await supabase
+                        .from('project_members')
+                        .select('user_id, projects:project_id(name)');
+
+                    const projectMap = {};
+                    if (assignments) {
+                        assignments.forEach(a => {
+                            projectMap[a.user_id] = a.projects?.name;
+                        });
+                    }
 
                     // Fetch TODAY'S attendance for "Availability", "Last Active", and "Current Task"
                     const today = new Date().toISOString().split('T')[0];
@@ -171,7 +193,7 @@ const ModulePage = ({ title, type }) => {
                             return {
                                 id: emp.id,
                                 name: emp.full_name || 'Unknown',
-                                dept: emp.teams?.team_name || 'Talent ops',
+                                dept: projectMap[emp.id] || 'Talent Ops',
                                 availability: availability,
                                 task: currentTask,
                                 lastActive: lastActive
@@ -688,7 +710,7 @@ const ModulePage = ({ title, type }) => {
 
     // Render specific demos for certain types
     if (type === 'analytics') return <AnalyticsDemo />;
-    if (type === 'tasks') return <ManagerTaskDashboard userRole={userRole} userId={userId} addToast={addToast} />;
+    if (type === 'tasks') return <AllTasksView userRole={userRole} userId={userId} addToast={addToast} />;
     if (title === 'Team Hierarchy' || title === 'Organizational Hierarchy') return <HierarchyDemo />;
     if (title === 'Project Hierarchy') return <ProjectHierarchyDemo />;
     if (title === 'Settings') return <SettingsDemo />;
@@ -714,7 +736,7 @@ const ModulePage = ({ title, type }) => {
                     )
                 },
                 { header: 'Role', accessor: 'role' },
-                { header: 'Team', accessor: 'dept' },
+                { header: 'Project', accessor: 'dept' },
                 { header: 'Join Date', accessor: 'joinDate' },
                 {
                     header: 'Actions', accessor: 'actions', render: (row) => (
@@ -748,7 +770,7 @@ const ModulePage = ({ title, type }) => {
         status: {
             columns: [
                 { header: 'Employee', accessor: 'name' },
-                { header: 'Department', accessor: 'dept' },
+                { header: 'Project', accessor: 'dept' },
                 {
                     header: 'Availability', accessor: 'availability', render: (row) => (
                         <span style={{

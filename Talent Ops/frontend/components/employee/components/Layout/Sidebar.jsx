@@ -64,19 +64,20 @@ const Sidebar = ({ isCollapsed, toggleSidebar }) => {
     const projectMenusByRole = {
         consultant: [
             { icon: FileText, label: 'Documents', path: '/employee-dashboard/documents' },
-            { icon: Users, label: 'Team', path: '/employee-dashboard/employees' },
+            { icon: Users, label: 'Project', path: '/employee-dashboard/employees' },
             { icon: BarChart2, label: 'Analytics', path: '/employee-dashboard/analytics' },
             { icon: Network, label: 'Hierarchy', path: '/employee-dashboard/project-hierarchy' },
         ],
         employee: [
+            { icon: ListTodo, label: 'My Tasks', path: '/employee-dashboard/tasks' },
             { icon: FileText, label: 'Documents', path: '/employee-dashboard/documents' },
-            { icon: Users, label: 'Team', path: '/employee-dashboard/employees' },
+            { icon: Users, label: 'Project', path: '/employee-dashboard/employees' },
             { icon: BarChart2, label: 'Analytics', path: '/employee-dashboard/analytics' },
             { icon: Network, label: 'Hierarchy', path: '/employee-dashboard/project-hierarchy' },
         ],
         team_lead: [
             { icon: ListTodo, label: 'All Tasks', path: '/employee-dashboard/tasks' },
-            { icon: Users, label: 'My Team', path: '/employee-dashboard/employees' },
+            { icon: Users, label: 'My Project', path: '/employee-dashboard/employees' },
             { icon: ClipboardCheck, label: 'Assign Tasks', path: '/employee-dashboard/assign-tasks' },
             { icon: TrendingUp, label: 'Performance', path: '/employee-dashboard/performance' },
             { icon: BarChart2, label: 'Analytics', path: '/employee-dashboard/analytics' },
@@ -84,7 +85,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar }) => {
         ],
         manager: [
             { icon: ListTodo, label: 'All Tasks', path: '/employee-dashboard/tasks' },
-            { icon: Users, label: 'Team', path: '/employee-dashboard/employees' },
+            { icon: Users, label: 'Project', path: '/employee-dashboard/employees' },
             { icon: ClipboardCheck, label: 'Assign Tasks', path: '/employee-dashboard/assign-tasks' },
             { icon: CalendarCheck, label: 'Approve Leaves', path: '/employee-dashboard/approve-leaves' },
             { icon: UserPlus, label: 'Manage Members', path: '/employee-dashboard/manage-members' },

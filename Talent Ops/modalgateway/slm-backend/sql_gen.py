@@ -49,6 +49,15 @@ TABLE candidates:
 
 TABLE jobs:
   - id (uuid), title (text), description (text), location (text), department (text), status (text)
+
+TABLE projects:
+  - id (uuid), name (text), owner_id (uuid)
+
+TABLE project_members:
+  - user_id (uuid), project_id (uuid), role (text)
+
+TABLE project_analytics:
+  - id (uuid), project_id (uuid), month (text), budget (numeric), spend (numeric), revenue (numeric)
 """
 
 def generate_sql_prompt(user_role: str, user_id: str, team_id: str, user_query: str) -> str:
@@ -112,20 +121,22 @@ TECHNICAL GUIDANCE FOR SQL:
 - Use the TODAY date provided in the prompt for comparisons.
 
 COMMON QUERY PATTERNS (USE ILIKE FOR NAME SEARCHES):
-- "Which team is [name] in?" / "What team does [name] belong to?":
-  `SELECT p.full_name, t.team_name FROM profiles p JOIN teams t ON p.team_id = t.id WHERE p.full_name ILIKE '%[name]%'`
+- "Which project is [name] in?" / "What project does [name] belong to?":
+  `SELECT p.full_name, pr.name FROM profiles p JOIN project_members pm ON p.id = pm.user_id JOIN projects pr ON pm.project_id = pr.id WHERE p.full_name ILIKE '%[name]%'`
+- "Who is in [project]?" / "List members of [project]":
+  `SELECT p.full_name, pm.role FROM profiles p JOIN project_members pm ON p.id = pm.user_id JOIN projects pr ON pm.project_id = pr.id WHERE pr.name ILIKE '%[project]%'`
 - "How many leaves does [name] have?" / "[name]'s leave balance":
   `SELECT full_name, leaves_remaining, leaves_taken_this_month, monthly_leave_quota FROM profiles WHERE full_name ILIKE '%[name]%'`
 - "Who is [name]?" / "Tell me about [name]" / "[name]'s profile":
   `SELECT full_name, email, role, location, phone FROM profiles WHERE full_name ILIKE '%[name]%'`
 - "What is [name]'s role?":
   `SELECT full_name, role FROM profiles WHERE full_name ILIKE '%[name]%'`
-- "Who are the employees in [team] team?":
-  `SELECT p.full_name, p.role FROM profiles p JOIN teams t ON p.team_id = t.id WHERE t.team_name ILIKE '%[team]%'`
 - "List all employees" / "Show all people":
   `SELECT full_name, role, email FROM profiles`
 - "How many leaves has [name] taken?":
   `SELECT full_name, leaves_taken_this_month FROM profiles WHERE full_name ILIKE '%[name]%'`
+- "Show project analytics for [project]":
+  `SELECT pa.* FROM project_analytics pa JOIN projects p ON pa.project_id = p.id WHERE p.name ILIKE '%[project]%'`
 
 IMPORTANT: Always use ILIKE with % wildcards for name matching (e.g., ILIKE '%pavan%' NOT = 'pavan'). Names may be partial.
 

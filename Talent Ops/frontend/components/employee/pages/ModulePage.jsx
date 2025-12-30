@@ -128,41 +128,55 @@ const ModulePage = ({ title, type }) => {
         fetchRemainingLeaves();
     }, [userId, userName, addToast, refreshTrigger]);
 
-    // Fetch team members
+    // Fetch team members based on Current Project
     useEffect(() => {
-        if (!teamId) return;
+        if (!currentProject?.id) {
+            setTeamMembers([]);
+            return;
+        }
 
         const fetchTeamMembers = async () => {
             try {
-                // 1. Fetch profiles directly (no join)
-                const { data: profiles, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('team_id', teamId);
+                // 1. Fetch project members IDs first
+                const { data: memberIds, error: memberError } = await supabase
+                    .from('project_members')
+                    .select('user_id')
+                    .eq('project_id', currentProject.id);
 
-                if (profileError) throw profileError;
+                if (memberError) throw memberError;
 
-                if (!profiles || profiles.length === 0) {
+                if (!memberIds || memberIds.length === 0) {
                     setTeamMembers([]);
                     return;
                 }
 
-                // 2. Fetch team name separately
-                let teamName = 'Unassigned';
-                const { data: teamData } = await supabase
-                    .from('teams')
-                    .select('team_name')
-                    .eq('id', teamId)
-                    .single();
+                const userIds = memberIds.map(m => m.user_id);
 
-                if (teamData) teamName = teamData.team_name;
+                // 2. Fetch profiles for these users
+                const { data: profiles, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .in('id', userIds);
+
+                if (profileError) throw profileError;
+
+                // 2.1 Fetch Departments for mapping
+                const { data: deptData } = await supabase.from('departments').select('id, department_name');
+                const deptMap = {};
+                if (deptData) {
+                    deptData.forEach(d => deptMap[d.id] = d.department_name);
+                }
+
+                // 3. Use Current Project Name
+                const teamName = currentProject.name || 'Unassigned';
 
                 const today = new Date().toISOString().split('T')[0];
 
-                // 3. Fetch today's attendance for status
+                // 4. Fetch today's attendance for status
                 const { data: attendance } = await supabase
                     .from('attendance')
                     .select('employee_id, clock_in, clock_out')
+                    .in('employee_id', userIds)
                     .eq('date', today);
 
                 const activeSet = new Set();
@@ -174,11 +188,12 @@ const ModulePage = ({ title, type }) => {
                     });
                 }
 
-                // 4. Fetch today's leaves for status
+                // 5. Fetch today's leaves for status
                 const { data: leaves } = await supabase
                     .from('leaves')
                     .select('employee_id')
                     .eq('status', 'approved')
+                    .in('employee_id', userIds)
                     .lte('from_date', today)
                     .gte('to_date', today);
 
@@ -198,10 +213,12 @@ const ModulePage = ({ title, type }) => {
                         email: member.email || 'N/A',
                         role: member.role || 'N/A',
                         dept: teamName,
+                        department: member.department, // Keep original department ID for internal logic
+                        departmentName: deptMap[member.department] || 'Unassigned',
                         phone: member.phone || 'N/A',
                         location: member.location || 'N/A',
                         status: status,
-                        joinDate: member.created_at ? new Date(member.created_at).toLocaleDateString() : 'N/A'
+                        joinDate: member.join_date ? new Date(member.join_date).toLocaleDateString() : (member.created_at ? new Date(member.created_at).toLocaleDateString() : 'N/A')
                     };
                 });
                 setTeamMembers(mappedMembers);
@@ -213,7 +230,7 @@ const ModulePage = ({ title, type }) => {
         };
 
         fetchTeamMembers();
-    }, [teamId, refreshTrigger]);
+    }, [currentProject?.id, refreshTrigger]);
 
     // Realtime Subscription
     useEffect(() => {
@@ -734,7 +751,7 @@ const ModulePage = ({ title, type }) => {
                 },
             ],
 
-            data: filterData(teamMembers)
+            data: teamMembers
         },
         status: {
             columns: [
@@ -1490,11 +1507,11 @@ const ModulePage = ({ title, type }) => {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                     <div style={{ padding: '16px', backgroundColor: 'var(--background)', borderRadius: '12px' }}>
                                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Department</p>
-                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.dept}</p>
+                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.departmentName}</p>
                                     </div>
                                     <div style={{ padding: '16px', backgroundColor: 'var(--background)', borderRadius: '12px' }}>
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Employee</p>
-                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.employee || 'N/A'}</p>
+                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Project</p>
+                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.dept}</p>
                                     </div>
                                 </div>
                             </div>

@@ -9,6 +9,7 @@ import ProjectHierarchy from './pages/ProjectHierarchy';
 import TaskManagement from './pages/TaskManagement';
 import NotificationsPage from '../shared/NotificationsPage';
 import MessagingHub from '../shared/MessagingHub';
+import AllTasksView from '../shared/AllTasksView';
 import { ToastProvider } from './context/ToastContext';
 import { UserProvider } from './context/UserContext';
 import { ProjectProvider } from './context/ProjectContext';
@@ -30,7 +31,7 @@ function App() {
                 <Route path="/employee-dashboard/assign-tasks" element={<TaskManagement />} />
                 <Route path="/employee-dashboard/analytics" element={<ModulePage title="My Analytics" type="analytics" />} />
                 <Route path="/employee-dashboard/employees" element={<ModulePage title="Team Members" type="workforce" />} />
-                <Route path="/employee-dashboard/tasks" element={<ModulePage title="Your Tasks" type="tasks" />} />
+                <Route path="/employee-dashboard/tasks" element={<AllTasksView userRole="employee" />} />
                 <Route path="/employee-dashboard/leaves" element={<ModulePage title="Leave Requests" type="leaves" />} />
                 <Route path="/employee-dashboard/team-status" element={<ModulePage title="Your Status" type="status" />} />
                 <Route path="/employee-dashboard/payslips" element={<ModulePage title="Your Payslip" type="payroll" />} />

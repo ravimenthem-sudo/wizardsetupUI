@@ -18,14 +18,14 @@ const ProjectHierarchy = () => {
     const fetchProjectHierarchy = async () => {
         setLoading(true);
         try {
-            // Fetch team members for this project
+            // Fetch project members for this project
             const { data: members, error } = await supabase
-                .from('team_members')
+                .from('project_members')
                 .select(`
                     id,
-                    role_in_project,
-                    profile_id,
-                    profiles:profile_id (
+                    role,
+                    user_id,
+                    profiles:user_id (
                         id,
                         full_name,
                         email,
@@ -33,7 +33,7 @@ const ProjectHierarchy = () => {
                         role
                     )
                 `)
-                .eq('team_id', currentProject.id);
+                .eq('project_id', currentProject.id);
 
             if (error) throw error;
 
@@ -50,12 +50,12 @@ const ProjectHierarchy = () => {
                 type: 'role',
                 emoji: '👔',
                 description: 'External stakeholder / Project sponsor',
-                children: members?.filter(m => m.role_in_project === 'pm' || m.profiles?.role === 'executive').map(m => ({
+                children: members?.filter(m => m.role === 'pm' || m.profiles?.role === 'executive').map(m => ({
                     name: m.profiles?.full_name || m.profiles?.email || 'Unknown',
                     type: 'person',
                     role: 'Client Executive',
                     avatar: m.profiles?.avatar_url,
-                    id: m.profile_id
+                    id: m.user_id
                 })) || []
             });
 
@@ -74,7 +74,7 @@ const ProjectHierarchy = () => {
             });
 
             // Add Team Leads
-            const teamLeads = members?.filter(m => m.role_in_project === 'team_lead') || [];
+            const teamLeads = members?.filter(m => m.role === 'team_lead') || [];
             if (teamLeads.length > 0) {
                 projectStructure.children.push({
                     name: 'Team Leads',
@@ -85,21 +85,21 @@ const ProjectHierarchy = () => {
                         type: 'person',
                         role: 'Team Lead',
                         avatar: tl.profiles?.avatar_url,
-                        id: tl.profile_id
+                        id: tl.user_id
                     }))
                 });
             }
 
             // Add Consultants (developers, designers, etc.)
             const consultants = members?.filter(m =>
-                !['pm', 'team_lead'].includes(m.role_in_project) &&
+                !['pm', 'team_lead'].includes(m.role) &&
                 m.profiles?.role !== 'executive'
             ) || [];
 
-            // Group by role_in_project
+            // Group by role
             const roleGroups = {};
             consultants.forEach(c => {
-                const role = c.role_in_project || 'other';
+                const role = c.role || 'other';
                 if (!roleGroups[role]) roleGroups[role] = [];
                 roleGroups[role].push(c);
             });
@@ -124,7 +124,7 @@ const ProjectHierarchy = () => {
                         type: 'person',
                         role: role.charAt(0).toUpperCase() + role.slice(1),
                         avatar: m.profiles?.avatar_url,
-                        id: m.profile_id
+                        id: m.user_id
                     }))
                 });
             });

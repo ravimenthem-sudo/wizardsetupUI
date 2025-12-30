@@ -48,9 +48,9 @@ const ProjectManagement = ({ addToast = () => { } }) => {
     const fetchProjectMembers = async (projectId) => {
         try {
             const { data, error } = await supabase
-                .from('team_members')
-                .select('*, profiles:profile_id(id, full_name, email)')
-                .eq('team_id', projectId);
+                .from('project_members')
+                .select('*, profiles:user_id(id, full_name, email)')
+                .eq('project_id', projectId);
             if (error) throw error;
             setProjectMembers(data || []);
         } catch (error) {
@@ -76,15 +76,15 @@ const ProjectManagement = ({ addToast = () => { } }) => {
         if (!selectedProject) return;
 
         const insertData = {
-            team_id: selectedProject.id,
-            profile_id: userId,
-            role_in_project: selectedRole
+            project_id: selectedProject.id,
+            user_id: userId,
+            role: selectedRole
         };
         console.log('🔍 Adding member with data:', insertData);
         console.log('🔍 Selected project:', selectedProject);
 
         try {
-            const { data, error } = await supabase.from('team_members').insert(insertData).select();
+            const { data, error } = await supabase.from('project_members').insert(insertData).select();
             console.log('📝 Insert result - data:', data, 'error:', error);
             if (error) throw error;
             fetchProjectMembers(selectedProject.id);
@@ -103,7 +103,7 @@ const ProjectManagement = ({ addToast = () => { } }) => {
 
     const removeMember = async (memberId) => {
         try {
-            const { error } = await supabase.from('team_members').delete().eq('id', memberId);
+            const { error } = await supabase.from('project_members').delete().eq('id', memberId);
             if (error) throw error;
             setProjectMembers(projectMembers.filter(m => m.id !== memberId));
             addToast?.('Member removed', 'success');
@@ -114,7 +114,7 @@ const ProjectManagement = ({ addToast = () => { } }) => {
 
     const updateMemberRole = async (memberId, newRole) => {
         try {
-            const { error } = await supabase.from('team_members').update({ role_in_project: newRole }).eq('id', memberId);
+            const { error } = await supabase.from('project_members').update({ role: newRole }).eq('id', memberId);
             if (error) throw error;
             setProjectMembers(projectMembers.map(m => m.id === memberId ? { ...m, role: newRole } : m));
             addToast?.('Role updated', 'success');
@@ -189,7 +189,7 @@ const ProjectManagement = ({ addToast = () => { } }) => {
                             {projectMembers.length === 0 ? (
                                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                                     <Users size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
-                                    <p>No members yet. Add team members to get started.</p>
+                                    <p>No members yet. Add project members to get started.</p>
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

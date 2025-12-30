@@ -14,16 +14,27 @@ interface Team {
     name: string;
 }
 
+interface Project {
+    id: string;
+    name: string;
+}
+
+interface Department {
+    id: string;
+    department_name: string;
+}
+
 export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, onSuccess, employee }) => {
     const [loading, setLoading] = useState(false);
-    const [teams, setTeams] = useState<Team[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [departments, setDepartments] = useState<Department[]>([]);
     const [currentUserRole, setCurrentUserRole] = useState<string>('');
+    const [selectedProjects, setSelectedProjects] = useState<string[]>([]); // Array of project IDs
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
         role: 'employee',
-        team_id: '',
-        newTeamName: '',
+        department_id: '', // Added department_id
         monthly_leave_quota: 3,
         basic_salary: '',
         hra: '',
@@ -31,22 +42,25 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, on
         change_reason: 'Annual Increment',
         custom_change_reason: '',
         effective_from: new Date().toISOString().split('T')[0],
+        joinDate: '',
     });
     const [originalSalary, setOriginalSalary] = useState<any>(null);
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (isOpen && employee) {
-            fetchTeams();
+            fetchProjects();
+            fetchDepartments();
             fetchCurrentUserRole();
             fetchEmployeeSalary();
+            fetchEmployeeProjects(); // Fetch ALL projects
+            fetchEmployeeDepartment(); // Fetch current department
             // Populate form with employee data
             setFormData({
                 full_name: employee.name || '',
                 email: employee.email || '',
                 role: employee.role || 'employee',
-                team_id: employee.team_id || '',
-                newTeamName: '',
+                department_id: '', // Will be updated by fetchEmployeeDepartment
                 monthly_leave_quota: employee.monthly_leave_quota || 3,
                 basic_salary: '',
                 hra: '',
@@ -54,28 +68,109 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, on
                 change_reason: 'Annual Increment',
                 custom_change_reason: '',
                 effective_from: new Date().toISOString().split('T')[0],
+                joinDate: '',
             });
         }
     }, [isOpen, employee]);
 
-    const fetchTeams = async () => {
-        console.log('Fetching teams for edit modal...');
+    const fetchDepartments = async () => {
+        console.log('Fetching departments...');
         const { data, error } = await supabase
-            .from('teams')
-            .select('id, team_name');
+            .from('departments')
+            .select('id, department_name')
+            .order('department_name');
 
         if (error) {
-            console.error('Error fetching teams:', error);
+            console.error('Error fetching departments:', error);
         } else {
-            console.log('Teams fetched:', data);
-            // Map team_name to name for consistency
-            const mappedTeams = data?.map(team => ({
-                id: team.id,
-                name: team.team_name
-            })) || [];
-            setTeams(mappedTeams);
+            console.log('Departments fetched:', data);
+            setDepartments(data || []);
         }
     };
+
+    const fetchEmployeeDepartment = async () => {
+        if (!employee?.id) return;
+        try {
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('department, join_date')
+                .eq('id', employee.id)
+                .single();
+
+            if (profile) {
+                setFormData(prev => ({
+                    ...prev,
+                    department_id: profile.department || '',
+                    joinDate: profile.join_date || ''
+                }));
+            }
+        } catch (err) {
+            console.error('Error fetching employee details:', err);
+        }
+    };
+
+    const fetchProjects = async () => {
+        console.log('Fetching projects for edit modal...');
+        const { data, error } = await supabase
+            .from('projects')
+            .select('id, name')
+            .order('name');
+
+        if (error) {
+            console.error('Error fetching projects:', error);
+        } else {
+            console.log('Projects fetched:', data);
+            setProjects(data || []);
+        }
+    };
+
+    const fetchEmployeeProjects = async () => {
+        if (!employee?.id) return;
+        try {
+            const { data, error } = await supabase
+                .from('project_members')
+                .select('project_id')
+                .eq('user_id', employee.id);
+
+            if (data && data.length > 0) {
+                const projectIds = data.map(p => p.project_id);
+                setSelectedProjects(projectIds);
+                console.log('Employee assigned to projects:', projectIds);
+            } else {
+                setSelectedProjects([]);
+            }
+        } catch (error) {
+            console.error('Error fetching employee projects:', error);
+        }
+    };
+
+    // New useEffect to match department ID once departments are loaded
+    useEffect(() => {
+        if (departments.length > 0 && employee?.id) {
+            const matchDept = async () => {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('department')
+                    .eq('id', employee.id)
+                    .single();
+
+                if (profile?.department) {
+                    // Try to match by ID first (new behavior)
+                    const matchedById = departments.find(d => d.id === profile.department);
+                    if (matchedById) {
+                        setFormData(prev => ({ ...prev, department_id: matchedById.id }));
+                    } else {
+                        // Fallback: Try to match by name (old behavior)
+                        const matchedByName = departments.find(d => d.department_name === profile.department);
+                        if (matchedByName) {
+                            setFormData(prev => ({ ...prev, department_id: matchedByName.id }));
+                        }
+                    }
+                }
+            };
+            matchDept();
+        }
+    }, [departments, employee?.id]);
 
     const fetchCurrentUserRole = async () => {
         try {
@@ -129,31 +224,13 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, on
         setLoading(true);
 
         try {
-            let teamId = formData.team_id;
-
-            // If creating a new team, create it first
-            if (formData.team_id === 'new' && formData.newTeamName) {
-                const { data: newTeam, error: teamError } = await supabase
-                    .from('teams')
-                    .insert([{ team_name: formData.newTeamName }])
-                    .select()
-                    .single();
-
-                if (teamError) {
-                    throw new Error(`Failed to create team: ${teamError.message}`);
-                }
-
-                teamId = newTeam.id;
-            } else if (formData.team_id === 'new') {
-                throw new Error('Please enter a team name');
-            }
-
             // Update employee profile
             console.log('Updating employee with data:', {
                 full_name: formData.full_name,
                 role: formData.role,
-                team_id: teamId || null,
+                department: formData.department_id || null,
                 monthly_leave_quota: formData.monthly_leave_quota,
+                join_date: formData.joinDate,
             });
 
             const { error: updateError } = await supabase
@@ -161,14 +238,60 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, on
                 .update({
                     full_name: formData.full_name,
                     role: formData.role,
-                    team_id: teamId || null,
+                    department: formData.department_id || null,
                     monthly_leave_quota: formData.monthly_leave_quota,
+                    join_date: formData.joinDate,
                 })
                 .eq('id', employee.id);
 
             if (updateError) {
                 console.error('Update error details:', updateError);
                 throw new Error(updateError.message || 'Failed to update employee');
+            }
+
+            // Update project assignments - handle multiple projects
+            const { data: currentAssignments } = await supabase
+                .from('project_members')
+                .select('project_id')
+                .eq('user_id', employee.id);
+
+            const currentProjectIds = currentAssignments?.map(a => a.project_id) || [];
+
+            // Find projects to add and remove
+            const projectsToAdd = selectedProjects.filter(id => !currentProjectIds.includes(id));
+            const projectsToRemove = currentProjectIds.filter(id => !selectedProjects.includes(id));
+
+            console.log('Projects to add:', projectsToAdd);
+            console.log('Projects to remove:', projectsToRemove);
+
+            // Remove from projects
+            if (projectsToRemove.length > 0) {
+                await supabase
+                    .from('project_members')
+                    .delete()
+                    .eq('user_id', employee.id)
+                    .in('project_id', projectsToRemove);
+            }
+
+            // Add to new projects
+            if (projectsToAdd.length > 0) {
+                const newAssignments = projectsToAdd.map(projectId => ({
+                    project_id: projectId,
+                    user_id: employee.id,
+                    role: formData.role
+                }));
+                await supabase
+                    .from('project_members')
+                    .insert(newAssignments);
+            }
+
+            // Update role in all remaining projects
+            if (selectedProjects.length > 0) {
+                await supabase
+                    .from('project_members')
+                    .update({ role: formData.role })
+                    .eq('user_id', employee.id)
+                    .in('project_id', selectedProjects);
             }
 
             console.log('Employee updated successfully');
@@ -412,18 +535,102 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, on
                             </select>
                         </div>
 
-                        {/* Team */}
+                        {/* Department */}
                         <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
-                                Team
+                                Department
                             </label>
                             <select
-                                value={formData.team_id}
+                                value={formData.department_id}
+                                onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                    backgroundColor: 'var(--background)',
+                                    color: 'var(--text-primary)',
+                                }}
+                            >
+                                <option value="">Select Department</option>
+                                <option value="">No Department</option>
+                                {departments.map((dept) => (
+                                    <option key={dept.id} value={dept.id}>
+                                        {dept.department_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Projects - Multi-select */}
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
+                                Projects (Select Multiple)
+                            </label>
+
+                            {/* Selected Projects Display */}
+                            <div style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '8px',
+                                marginBottom: '12px',
+                                minHeight: '40px',
+                                padding: '8px',
+                                borderRadius: '8px',
+                                border: '1px solid var(--border)',
+                                backgroundColor: 'var(--background)',
+                            }}>
+                                {selectedProjects.length === 0 ? (
+                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                        No projects selected
+                                    </span>
+                                ) : (
+                                    selectedProjects.map(projectId => {
+                                        const project = projects.find(p => p.id === projectId);
+                                        return project ? (
+                                            <div
+                                                key={projectId}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    padding: '6px 12px',
+                                                    borderRadius: '6px',
+                                                    backgroundColor: 'var(--primary)',
+                                                    color: 'white',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 500,
+                                                }}
+                                            >
+                                                {project.name}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedProjects(selectedProjects.filter(id => id !== projectId))}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: 'white',
+                                                        cursor: 'pointer',
+                                                        padding: '0',
+                                                        fontSize: '1.2rem',
+                                                        lineHeight: '1',
+                                                        marginLeft: '4px',
+                                                    }}
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ) : null;
+                                    })
+                                )}
+                            </div>
+
+                            {/* Available Projects Dropdown */}
+                            <select
+                                value=""
                                 onChange={(e) => {
-                                    const value = e.target.value;
-                                    setFormData({ ...formData, team_id: value });
-                                    if (value !== 'new') {
-                                        setFormData(prev => ({ ...prev, newTeamName: '' }));
+                                    if (e.target.value && !selectedProjects.includes(e.target.value)) {
+                                        setSelectedProjects([...selectedProjects, e.target.value]);
                                     }
                                 }}
                                 style={{
@@ -435,39 +642,36 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, on
                                     color: 'var(--text-primary)',
                                 }}
                             >
-                                <option value="">No Team</option>
-                                {teams.map((team) => (
-                                    <option key={team.id} value={team.id}>
-                                        {team.name}
-                                    </option>
-                                ))}
-                                <option value="new">+ Create New Team</option>
+                                <option value="">+ Add Project</option>
+                                {projects
+                                    .filter(project => !selectedProjects.includes(project.id))
+                                    .map((project) => (
+                                        <option key={project.id} value={project.id}>
+                                            {project.name}
+                                        </option>
+                                    ))}
                             </select>
                         </div>
 
-                        {/* New Team Name */}
-                        {formData.team_id === 'new' && (
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
-                                    New Team Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={formData.newTeamName || ''}
-                                    onChange={(e) => setFormData({ ...formData, newTeamName: e.target.value })}
-                                    placeholder="Enter team name..."
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px',
-                                        borderRadius: '8px',
-                                        border: '1px solid var(--border)',
-                                        backgroundColor: 'var(--background)',
-                                        color: 'var(--text-primary)',
-                                    }}
-                                />
-                            </div>
-                        )}
+                        {/* Join Date */}
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 500 }}>
+                                Join Date
+                            </label>
+                            <input
+                                type="date"
+                                value={formData.joinDate || ''}
+                                onChange={(e) => setFormData({ ...formData, joinDate: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid var(--border)',
+                                    backgroundColor: 'var(--background)',
+                                    color: 'var(--text-primary)',
+                                }}
+                            />
+                        </div>
 
                         {/* Monthly Leave Quota */}
                         <div>

@@ -4,6 +4,7 @@ import Layout from './components/Layout/Layout';
 import DashboardHome from './pages/DashboardHome';
 import ModulePage from './pages/ModulePage';
 import MessagingHub from '../shared/MessagingHub';
+import AllTasksView from '../shared/AllTasksView';
 import { ToastProvider } from './context/ToastContext';
 import { UserProvider } from './context/UserContext';
 
@@ -18,7 +19,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardHome />} />
               <Route path="/analytics" element={<ModulePage title="Analytics" type="analytics" />} />
               <Route path="/employees" element={<ModulePage title="Team Members" type="team_members" />} />
-              <Route path="/tasks" element={<ModulePage title="Task Teamlead" type="tasks" />} />
+              <Route path="/tasks" element={<AllTasksView userRole="team_lead" />} />
               <Route path="/leaves" element={<ModulePage title="Leave Requests" type="leaves" />} />
               <Route path="/leaves" element={<ModulePage title="Leave Requests" type="leaves" />} />
               <Route path="/team-status" element={<ModulePage title="Team Status" type="status" />} />

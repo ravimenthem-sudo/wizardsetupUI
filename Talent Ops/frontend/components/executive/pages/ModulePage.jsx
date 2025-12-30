@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import AnalyticsDemo from '../components/Demo/AnalyticsDemo';
 import KanbanDemo from '../components/Demo/KanbanDemo';
 import TaskLifecyclePage from '../../shared/TaskLifecyclePage';
-import ManagerTaskDashboard from '../../shared/ManagerTaskDashboard';
+import AllTasksView from '../../shared/AllTasksView';
 import HierarchyDemo from '../components/Demo/HierarchyDemo';
 import SettingsDemo from '../components/Demo/SettingsDemo';
 import AuditLogsDemo from '../components/Demo/AuditLogsDemo';
@@ -79,17 +79,20 @@ const ModulePage = ({ title, type }) => {
     // State for Employees
     const [employees, setEmployees] = useState([]);
     const [teamOptions, setTeamOptions] = useState([]); // Store fetched teams
+    const [projects, setProjects] = useState([]); // Store fetched projects
+    const [departments, setDepartments] = useState([]); // Store fetched departments
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [showEditEmployeeModal, setShowEditEmployeeModal] = useState(false);
     const [selectedEmployeeForEdit, setSelectedEmployeeForEdit] = useState(null);
 
     const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
+    const [selectedProjectsForAdd, setSelectedProjectsForAdd] = useState([]); // For multi-project selection
     const [addEmployeeFormData, setAddEmployeeFormData] = useState({
         name: '',
         email: '',
         password: '',
         role: '',
-        dept: '',
+        department_id: '',
         phone: '',
         location: '',
         joinDate: new Date().toISOString().split('T')[0],
@@ -106,6 +109,25 @@ const ModulePage = ({ title, type }) => {
 
 
 
+    // Fetch projects and departments from Supabase
+    useEffect(() => {
+        const fetchMetadata = async () => {
+            try {
+                // Fetch Projects
+                const { data: projData } = await supabase.from('projects').select('id, name').order('name');
+                setProjects(projData || []);
+
+                // Fetch Departments
+                const { data: deptData } = await supabase.from('departments').select('id, department_name');
+                setDepartments(deptData || []);
+            } catch (err) {
+                console.error('Error fetching metadata:', err);
+            }
+        };
+
+        fetchMetadata();
+    }, []);
+
     // Fetch employees from Supabase
     useEffect(() => {
         const fetchEmployees = async () => {
@@ -121,11 +143,10 @@ const ModulePage = ({ title, type }) => {
                             full_name, 
                             email, 
                             role, 
-                            team_id, 
+                            department,
+                            department,
                             created_at,
-                            teams!team_id (
-                                team_name
-                            )
+                            join_date
                         `);
 
                     if (profilesError) {
@@ -134,7 +155,30 @@ const ModulePage = ({ title, type }) => {
                         return;
                     }
 
-                    // 2. Fetch TODAY'S attendance records
+                    // 2. Fetch project assignments from project_members table
+                    const { data: teamMembersData, error: teamMembersError } = await supabase
+                        .from('project_members')
+                        .select(`
+                            user_id,
+                            project_id,
+                            projects:project_id (
+                                name
+                            )
+                        `);
+
+                    if (teamMembersError) {
+                        console.error('Error fetching team members:', teamMembersError);
+                    }
+
+                    // Create a map of user_id -> project name
+                    const projectMap = {};
+                    if (teamMembersData) {
+                        teamMembersData.forEach(member => {
+                            if (!projectMap[member.user_id]) projectMap[member.user_id] = []; if (member.projects?.name) projectMap[member.user_id].push(member.projects.name);
+                        });
+                    }
+
+                    // 3. Fetch TODAY'S attendance records
                     const today = new Date().toISOString().split('T')[0];
                     const { data: attendanceData, error: attendanceError } = await supabase
                         .from('attendance')
@@ -175,6 +219,7 @@ const ModulePage = ({ title, type }) => {
                     if (profilesData) {
                         console.log('Fetched profiles:', profilesData);
                         console.log('Fetched attendance for today:', attendanceData);
+                        console.log('Project assignments:', projectMap);
 
                         // Transform data to match the expected format
                         const transformedEmployees = profilesData.map(emp => {
@@ -202,18 +247,40 @@ const ModulePage = ({ title, type }) => {
                             const currentTask = (availability === 'Online' && attendance?.current_task) ? attendance.current_task :
                                 (availability === 'Online') ? 'Available' : '-';
 
+                            // Get project names from projectMap (array), fallback to teams.team_name, then 'Unassigned'
+                            let teamName;
+                            if (Array.isArray(projectMap[emp.id]) && projectMap[emp.id].length > 0) {
+                                // Multiple projects - render each on a new line
+                                teamName = (
+                                    <>
+                                        {projectMap[emp.id].map((projectName, index) => (
+                                            <div key={index}>{projectName}</div>
+                                        ))}
+                                    </>
+                                );
+                            } else {
+                                teamName = 'Unassigned';
+
+                            }
+
+                            // Determine Department Display (Name matched by ID or the ID itself/legacy name)
+                            const matchedDept = departments.find(d => d.id === emp.department);
+                            const departmentNameDisplay = matchedDept ? matchedDept.department_name : (emp.department || 'N/A');
+
                             return {
                                 id: emp.id,
                                 name: emp.full_name || 'N/A',
                                 email: emp.email || 'N/A',
                                 role: emp.role || 'N/A',
-                                dept: emp.teams?.team_name || 'Unassigned',
+                                team_id: emp.team_id,
+                                dept: teamName, // Shows Project/Team
+                                department_display: departmentNameDisplay,
                                 status: 'Active',
                                 availability: availability, // Real status from DB
                                 task: currentTask, // Real task from DB
 
                                 lastActive: lastActive, // Real clock time
-                                joinDate: emp.created_at ? new Date(emp.created_at).toLocaleDateString() : 'N/A',
+                                joinDate: emp.join_date ? new Date(emp.join_date).toLocaleDateString() : (emp.created_at ? new Date(emp.created_at).toLocaleDateString() : 'N/A'),
                                 performance: 'N/A',
                                 projects: 0,
                                 tasksCompleted: 0
@@ -317,7 +384,7 @@ const ModulePage = ({ title, type }) => {
         };
 
         fetchEmployees();
-    }, [type, refreshTrigger]);
+    }, [type, refreshTrigger, departments]);
 
     // Fetch Policies from Supabase
     useEffect(() => {
@@ -410,6 +477,147 @@ const ModulePage = ({ title, type }) => {
         } catch (error) {
             console.error('Error fetching employee salary:', error);
             setEmployeeSalary(null);
+        }
+    };
+
+    const handleAddEmployee = async (e) => {
+        e.preventDefault();
+
+        try {
+            // Get the current session token
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                addToast('You must be logged in to add employees', 'error');
+                return;
+            }
+
+            console.log('Adding employee with data:', addEmployeeFormData);
+
+            // Call the Supabase Edge Function to add employee
+            const response = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-employee`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`,
+                    },
+                    body: JSON.stringify({
+                        full_name: addEmployeeFormData.name,
+                        email: addEmployeeFormData.email,
+                        password: addEmployeeFormData.password,
+                        role: addEmployeeFormData.role.toLowerCase(),
+                        project_id: selectedProjectsForAdd[0] || null,
+                        department_id: addEmployeeFormData.department_id || null,
+                        monthly_leave_quota: 3,
+                        basic_salary: parseFloat(addEmployeeFormData.basic_salary),
+                        hra: parseFloat(addEmployeeFormData.hra),
+                        allowances: parseFloat(addEmployeeFormData.allowances) || 0,
+                    }),
+                }
+            );
+
+            let result;
+            try {
+                result = await response.json();
+            } catch (jsonError) {
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
+
+            console.log('Edge Function response:', result);
+
+            if (!response.ok) {
+                console.error('Edge Function error:', result);
+                throw new Error(result.error || result.message || `Server error: ${response.status}`);
+            }
+
+            // Get the user_id - either from the response or by querying
+            let userId = result.user_id;
+
+            if (!userId) {
+                // Query for the newly created user by email
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('email', addEmployeeFormData.email)
+                    .single();
+
+                if (profileError) {
+                    console.error('Error fetching user profile:', profileError);
+                } else {
+                    userId = profileData?.id;
+                }
+            }
+
+            if (userId) {
+                // Update profile with department if selected
+                if (addEmployeeFormData.department_id) {
+                    console.log('Updating profile with department ID:', addEmployeeFormData.department_id);
+                    await supabase
+                        .from('profiles')
+                        .update({ department: addEmployeeFormData.department_id })
+                        .eq('id', userId);
+                }
+
+                // If a project was selected, add the user to project_members
+                if (addEmployeeFormData.project_id) {
+                    // Insert into project_members table
+                    const { error: projectMemberError } = await supabase
+                        .from('project_members')
+                        .insert({
+                            project_id: selectedProjectsForAdd[0],
+                            user_id: userId,
+                            role: addEmployeeFormData.role.toLowerCase()
+                        });
+
+                    if (projectMemberError) {
+                        console.error('Error adding to project_members:', projectMemberError);
+                    } else {
+                        console.log('Successfully added to project_members');
+                    }
+
+                    // Insert into team_members table (using project_id as team_id)
+                    const { error: teamMemberError } = await supabase
+                        .from('team_members')
+                        .insert({
+                            team_id: addEmployeeFormData.project_id,
+                            profile_id: userId,
+                            role_in_project: addEmployeeFormData.role.toLowerCase()
+                        });
+
+                    if (teamMemberError) {
+                        console.error('Error adding to team_members:', teamMemberError);
+                    } else {
+                        console.log('Successfully added to team_members');
+                    }
+                }
+            } else {
+                console.error('Could not determine user_id for project mapping');
+            }
+
+            // Reset form
+            setAddEmployeeFormData({
+                name: '',
+                email: '',
+                password: '',
+                role: '',
+                project_id: '',
+                department_id: '',
+                phone: '',
+                location: '',
+                joinDate: new Date().toISOString().split('T')[0],
+                basic_salary: '',
+                hra: '',
+                allowances: '',
+            });
+
+            setShowAddEmployeeModal(false);
+            addToast('Employee added successfully!', 'success');
+            setRefreshTrigger(prev => prev + 1); // Refresh the employee list
+        } catch (err) {
+            console.error('Error adding employee:', err);
+            addToast(err.message || 'Failed to add employee', 'error');
         }
     };
 
@@ -692,90 +900,6 @@ const ModulePage = ({ title, type }) => {
         addToast('Leave application submitted successfully', 'success');
     };
 
-    const handleAddEmployee = async (e) => {
-        e.preventDefault();
-
-        try {
-            // Get the current session token
-            const { data: { session } } = await supabase.auth.getSession();
-
-            if (!session) {
-                throw new Error('You must be logged in to add employees');
-            }
-
-            // Call the Supabase Edge Function to add employee
-            console.log('Sending data to Edge Function:', {
-                full_name: addEmployeeFormData.name,
-                email: addEmployeeFormData.email,
-                role: addEmployeeFormData.role.toLowerCase().replace(' ', '_'),
-                team_id: addEmployeeFormData.dept || null,
-                basic_salary: parseFloat(addEmployeeFormData.basic_salary),
-                hra: parseFloat(addEmployeeFormData.hra),
-                allowances: parseFloat(addEmployeeFormData.allowances) || 0,
-            });
-
-            const response = await fetch(
-                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-employee`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
-                    },
-                    body: JSON.stringify({
-                        full_name: addEmployeeFormData.name,
-                        email: addEmployeeFormData.email,
-                        password: addEmployeeFormData.password,
-                        role: addEmployeeFormData.role.toLowerCase().replace(' ', '_'),
-                        team_id: addEmployeeFormData.dept || null,
-                        monthly_leave_quota: 3,
-                        basic_salary: parseFloat(addEmployeeFormData.basic_salary),
-                        hra: parseFloat(addEmployeeFormData.hra),
-                        allowances: parseFloat(addEmployeeFormData.allowances) || 0,
-                    }),
-                }
-            );
-
-            let result;
-            try {
-                result = await response.json();
-            } catch (jsonError) {
-                throw new Error(`Server error: ${response.status} ${response.statusText}`);
-            }
-
-            console.log('Edge Function response:', result);
-
-            if (!response.ok) {
-                console.error('Edge Function error:', result);
-                throw new Error(result.error || result.message || `Server error: ${response.status}`);
-            }
-
-            // Trigger refresh to show new employee
-            setRefreshTrigger(prev => prev + 1);
-
-            // Reset form
-            setShowAddEmployeeModal(false);
-            setAddEmployeeFormData({
-                name: '',
-                email: '',
-                password: '',
-                role: '',
-                dept: '',
-                phone: '',
-                location: '',
-                joinDate: new Date().toISOString().split('T')[0],
-                basic_salary: '',
-                hra: '',
-                allowances: '',
-            });
-            addToast('Employee added successfully', 'success');
-
-        } catch (error) {
-            console.error('Error adding employee:', error);
-            addToast(`Failed to add employee: ${error.message}`, 'error');
-        }
-    };
-
     const handleSaveCandidate = (e) => {
         e.preventDefault();
         const skillsArray = candidateFormData.skills.split(',').map(skill => skill.trim()).filter(skill => skill !== '');
@@ -801,7 +925,7 @@ const ModulePage = ({ title, type }) => {
 
     // Render specific demos for certain types
     if (type === 'analytics') return <AnalyticsDemo />;
-    if (type === 'tasks') return <ManagerTaskDashboard userRole={userRole} userId={userId} addToast={addToast} />;
+    if (type === 'tasks') return <AllTasksView userRole={userRole} userId={userId} addToast={addToast} />;
     if (title === 'Team Hierarchy' || title === 'Organizational Hierarchy') return <HierarchyDemo />;
     if (title === 'Project Hierarchy') return <ProjectHierarchyDemo isEditingEnabled={true} />;
     if (title === 'Settings') return <SettingsDemo />;
@@ -829,7 +953,8 @@ const ModulePage = ({ title, type }) => {
                     )
                 },
                 { header: 'Role', accessor: 'role' },
-                { header: 'Team', accessor: 'dept' },
+                { header: 'Department', accessor: 'department_display' },
+                { header: 'Project', accessor: 'dept' },
                 { header: 'Join Date', accessor: 'joinDate' },
                 {
                     header: 'Actions', accessor: 'actions', render: (row) => (
@@ -886,7 +1011,8 @@ const ModulePage = ({ title, type }) => {
         status: {
             columns: [
                 { header: 'Employee', accessor: 'name' },
-                { header: 'Department', accessor: 'dept' },
+                { header: 'Department', accessor: 'department_display' },
+                { header: 'Project', accessor: 'dept' },
                 {
                     header: 'Availability', accessor: 'availability', render: (row) => (
                         <span style={{
@@ -1457,11 +1583,11 @@ const ModulePage = ({ title, type }) => {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                     <div style={{ padding: '16px', backgroundColor: 'var(--background)', borderRadius: '12px' }}>
                                         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Department</p>
-                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.dept}</p>
+                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.department_display || 'N/A'}</p>
                                     </div>
                                     <div style={{ padding: '16px', backgroundColor: 'var(--background)', borderRadius: '12px' }}>
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Executive</p>
-                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.executive || 'N/A'}</p>
+                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Project</p>
+                                        <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>{selectedEmployee.dept}</p>
                                     </div>
                                 </div>
                             </div>
@@ -1720,177 +1846,18 @@ const ModulePage = ({ title, type }) => {
                 </div>
             )}
             {/* Add Employee Modal */}
-            {showAddEmployeeModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ backgroundColor: 'var(--surface)', padding: '32px', borderRadius: '16px', width: '500px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Add New Employee</h3>
-                            <button onClick={() => setShowAddEmployeeModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleAddEmployee} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Full Name</label>
-                                <input
-                                    type="text"
-                                    value={addEmployeeFormData.name}
-                                    onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, name: e.target.value })}
-                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Email</label>
-                                <input
-                                    type="email"
-                                    value={addEmployeeFormData.email}
-                                    onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, email: e.target.value })}
-                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Password</label>
-                                <input
-                                    type="password"
-                                    value={addEmployeeFormData.password}
-                                    onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, password: e.target.value })}
-                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                    required
-                                    minLength={6}
-                                />
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Role</label>
-                                    <select
-                                        value={addEmployeeFormData.role}
-                                        onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, role: e.target.value })}
-                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                        required
-                                    >
-                                        <option value="" disabled>Select Role</option>
-                                        <option value="Manager">Manager</option>
-                                        <option value="Team Lead">Team Lead</option>
-                                        <option value="Employee">Employee</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Project</label>
-                                    <select
-                                        value={addEmployeeFormData.dept}
-                                        onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, dept: e.target.value })}
-                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                        required
-                                    >
-                                        <option value="" disabled>Select Project</option>
-                                        <option value="">No Project (Unassigned)</option>
-                                        {teamOptions.map(team => (
-                                            <option key={team.id} value={team.id}>{team.team_name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Phone</label>
-                                    <input
-                                        type="tel"
-                                        value={addEmployeeFormData.phone}
-                                        onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, phone: e.target.value })}
-                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                    />
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Location</label>
-                                    <input
-                                        type="text"
-                                        value={addEmployeeFormData.location}
-                                        onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, location: e.target.value })}
-                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Join Date</label>
-                                <input
-                                    type="date"
-                                    value={addEmployeeFormData.joinDate}
-                                    onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, joinDate: e.target.value })}
-                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                    required
-                                />
-                            </div>
-
-                            {/* Compensation Details Section */}
-                            <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '2px solid var(--border)' }}>
-                                <h4 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '16px', color: 'var(--text-primary)' }}>Compensation Details</h4>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Basic Salary *</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={addEmployeeFormData.basic_salary}
-                                            onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, basic_salary: e.target.value })}
-                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                            placeholder="Enter basic salary"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>HRA *</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="0.01"
-                                            value={addEmployeeFormData.hra}
-                                            onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, hra: e.target.value })}
-                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                            placeholder="Enter HRA"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-
-                                <div style={{ marginTop: '16px' }}>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>Other Allowances</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        value={addEmployeeFormData.allowances}
-                                        onChange={(e) => setAddEmployeeFormData({ ...addEmployeeFormData, allowances: e.target.value })}
-                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '1rem', backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}
-                                        placeholder="Enter other allowances (optional)"
-                                    />
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAddEmployeeModal(false)}
-                                    style={{ flex: 1, padding: '12px', borderRadius: '8px', fontWeight: 600, border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--text-primary)', cursor: 'pointer' }}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    style={{ flex: 1, padding: '12px', borderRadius: '8px', fontWeight: 600, backgroundColor: 'var(--primary)', color: 'white', border: 'none', cursor: 'pointer', boxShadow: 'var(--shadow-md)' }}
-                                >
-                                    Add Employee
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div >
-            )}
+            <AddEmployeeModal
+                isOpen={showAddEmployeeModal}
+                onClose={() => setShowAddEmployeeModal(false)}
+                onSuccess={async () => {
+                    addToast('Employee added successfully', 'success');
+                    setShowAddEmployeeModal(false);
+                    // Refresh employees list
+                    if (type === 'workforce' || type === 'status') {
+                        window.location.reload();
+                    }
+                }}
+            />
 
             {/* Add/Edit Candidate Modal */}
             {
@@ -2096,7 +2063,7 @@ const ModulePage = ({ title, type }) => {
                 onSuccess={async () => {
                     addToast('Employee updated successfully', 'success');
                     // Refresh employees list
-                    if (type === 'workforce') {
+                    if (type === 'workforce' || type === 'status') {
                         try {
                             const { data, error } = await supabase
                                 .from('profiles')
@@ -2106,6 +2073,7 @@ const ModulePage = ({ title, type }) => {
                                     email, 
                                     role, 
                                     team_id, 
+                                    department,
                                     created_at,
                                     teams!team_id (
                                         team_name
@@ -2117,20 +2085,45 @@ const ModulePage = ({ title, type }) => {
                                 return;
                             }
 
+                            // Also fetch project assignments
+                            const { data: teamMembersData } = await supabase
+                                .from('project_members')
+                                .select(`
+                                    user_id,
+                                    project_id,
+                                    projects:project_id (
+                                        name
+                                    )
+                                `);
+
+                            const projectMap = {};
+                            if (teamMembersData) {
+                                teamMembersData.forEach(member => {
+                                    if (!projectMap[member.user_id]) projectMap[member.user_id] = []; if (member.projects?.name) projectMap[member.user_id].push(member.projects.name);
+                                });
+                            }
+
                             if (data) {
-                                const transformedEmployees = data.map(emp => ({
-                                    id: emp.id,
-                                    name: emp.full_name || 'N/A',
-                                    email: emp.email || 'N/A',
-                                    role: emp.role || 'N/A',
-                                    team_id: emp.team_id,
-                                    dept: emp.teams?.team_name || 'Unassigned',
-                                    status: 'Active',
-                                    joinDate: emp.created_at ? new Date(emp.created_at).toLocaleDateString() : 'N/A',
-                                    performance: 'N/A',
-                                    projects: 0,
-                                    tasksCompleted: 0
-                                }));
+                                const transformedEmployees = data.map(emp => {
+                                    // Match department name from ID
+                                    const matchedDept = departments.find(d => d.id === emp.department);
+                                    const departmentNameDisplay = matchedDept ? matchedDept.department_name : (emp.department || 'N/A');
+
+                                    return {
+                                        id: emp.id,
+                                        name: emp.full_name || 'N/A',
+                                        email: emp.email || 'N/A',
+                                        role: emp.role || 'N/A',
+                                        team_id: emp.team_id,
+                                        dept: (Array.isArray(projectMap[emp.id]) && projectMap[emp.id].length > 0) ? (<>{projectMap[emp.id].map((pn, i) => <div key={i}>{pn}</div>)}</>) : (emp.teams?.team_name || 'Unassigned'),
+                                        department_display: departmentNameDisplay,
+                                        status: 'Active',
+                                        joinDate: emp.created_at ? new Date(emp.created_at).toLocaleDateString() : 'N/A',
+                                        performance: 'N/A',
+                                        projects: 0,
+                                        tasksCompleted: 0
+                                    };
+                                });
                                 setEmployees(transformedEmployees);
                             }
                         } catch (err) {
@@ -2349,3 +2342,7 @@ const ModulePage = ({ title, type }) => {
 };
 
 export default ModulePage;
+
+
+
+

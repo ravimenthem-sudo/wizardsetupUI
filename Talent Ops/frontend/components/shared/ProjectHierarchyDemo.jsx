@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { X, Mail, Phone, MapPin, Folder, ChevronRight, User, Plus, Trash2, Edit2, Search, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
+import { useProject } from '../employee/context/ProjectContext';
+
 const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
+    const { currentProject } = useProject(); // Get current project from context
     const [selectedProject, setSelectedProject] = useState(null);
     const [viewMode, setViewMode] = useState('overview'); // 'overview', 'project-detail'
     const [hierarchyData, setHierarchyData] = useState({
@@ -18,9 +21,17 @@ const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
     const [selectedEmployee, setSelectedEmployee] = useState(null); // For viewing details
     const [showAddMemberModal, setShowAddMemberModal] = useState(false);
 
-    // We don't necessarily need a separate Edit modal if we only allow changing role/team via "Add Member" (which moves them) 
-    // or we can add a specific Edit Modal later. For now, "Add Member" handles moving people into the project.
-    // "Remove" handles taking them out. 
+    // Synch with Current Project Context
+    useEffect(() => {
+        if (currentProject && hierarchyData.projects.length > 0) {
+            const matched = hierarchyData.projects.find(p => p.id === currentProject.id);
+            if (matched) {
+                console.log("Auto-selecting project from context:", matched.name);
+                setSelectedProject(matched);
+                setViewMode('project-detail');
+            }
+        }
+    }, [currentProject, hierarchyData.projects]);
 
     const handleZoomIn = () => setScale(prev => Math.min(prev + 0.1, 2));
     const handleZoomOut = () => setScale(prev => Math.max(prev - 0.1, 0.25));
@@ -32,23 +43,23 @@ const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
 
     const fetchHierarchy = async () => {
         try {
-            // Fetch profiles with team info
+            // Fetch profiles
             const { data: profiles, error: profilesError } = await supabase
                 .from('profiles')
-                .select(`
-                    *,
-                    teams:team_id (
-                        team_name
-                    )
-                `)
+                .select('*')
                 .order('full_name');
 
             if (profilesError) throw profilesError;
             setAllProfiles(profiles);
 
-            // Fetch teams
-            const { data: teams, error: teamsError } = await supabase
-                .from('teams')
+            // Fetch projects (instead of teams)
+            const { data: projects, error: projectsError } = await supabase
+                .from('projects')
+                .select('*');
+
+            // Fetch project_members to get project assignments
+            const { data: teamMembers, error: teamMembersError } = await supabase
+                .from('project_members')
                 .select('*');
 
             if (profiles) {
@@ -59,36 +70,33 @@ const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
 
                 let projectsMap = [];
 
-                if (teams && teams.length > 0) {
-                    teams.forEach(team => {
-                        const teamMembers = profiles.filter(p => p.team_id === team.id);
-                        const projectManagers = teamMembers.filter(p => getRole(p) === 'manager');
-                        // Use first manager found or null
+                if (projects && projects.length > 0) {
+                    projects.forEach(project => {
+                        // Get members for this project from project_members table
+                        // AND merge with profile data, prioritizing project_members.role
+                        const projectTeamMembers = teamMembers
+                            ?.filter(tm => tm.project_id === project.id)
+                            .map(tm => {
+                                const profile = profiles.find(p => p.id === tm.user_id);
+                                if (!profile) return null;
+                                return {
+                                    ...profile,
+                                    role: tm.role || profile.role // Use project-specific role if available
+                                };
+                            })
+                            .filter(Boolean) || [];
+
+                        const getProjectRole = (p) => p.role ? p.role.toLowerCase().trim() : '';
+
+                        const projectManagers = projectTeamMembers.filter(p => getProjectRole(p) === 'manager');
                         const assignedManager = projectManagers.length > 0 ? projectManagers[0] : null;
 
-                        const leads = teamMembers.filter(p => getRole(p) === 'team_lead');
-                        const staff = teamMembers.filter(p => getRole(p) === 'employee');
+                        const leads = projectTeamMembers.filter(p => getProjectRole(p) === 'team_lead');
+                        const staff = projectTeamMembers.filter(p => getProjectRole(p) === 'employee');
 
                         projectsMap.push({
-                            id: team.id,
-                            name: team.team_name || 'Unnamed Project',
-                            manager: assignedManager,
-                            leads: leads,
-                            staff: staff
-                        });
-                    });
-                } else {
-                    const uniqueTeamIds = [...new Set(profiles.map(p => p.team_id).filter(id => id))];
-                    uniqueTeamIds.forEach((teamId, index) => {
-                        const teamMembers = profiles.filter(p => p.team_id === teamId);
-                        const projectManagers = teamMembers.filter(p => getRole(p) === 'manager');
-                        const assignedManager = projectManagers.length > 0 ? projectManagers[0] : null;
-                        const leads = teamMembers.filter(p => getRole(p) === 'team_lead');
-                        const staff = teamMembers.filter(p => getRole(p) === 'employee');
-
-                        projectsMap.push({
-                            id: teamId,
-                            name: `Project ${index + 1}`,
+                            id: project.id,
+                            name: project.name || 'Unnamed Project',
                             manager: assignedManager,
                             leads: leads,
                             staff: staff
@@ -120,10 +128,12 @@ const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
         e.stopPropagation();
         if (window.confirm(`Are you sure you want to remove ${member.full_name} from this project?`)) {
             try {
+                // Remove from project_members table
                 const { error } = await supabase
-                    .from('profiles')
-                    .update({ team_id: null })
-                    .eq('id', member.id);
+                    .from('project_members')
+                    .delete()
+                    .eq('project_id', selectedProject.id)
+                    .eq('user_id', member.id);
 
                 if (error) throw error;
                 fetchHierarchy();
@@ -138,20 +148,25 @@ const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
     const handleAddMember = async (userId, role) => {
         if (!selectedProject) return;
         try {
-            // Update user to this team and role
-            // Careful: 'role' in DB is text: 'Manager', 'Team Lead', 'Employee'
-            // We should match case to DB convention. Usually standardized to lowercase or Title Case.
-            // Existing code normalizes to lowercase for check, but let's see DB values.
-            // Assuming Title Case based on dropdown options.
-            const { error } = await supabase
+            // Update user role in profiles
+            const { error: profileError } = await supabase
                 .from('profiles')
-                .update({
-                    team_id: selectedProject.id,
-                    role: role
-                })
+                .update({ role: role })
                 .eq('id', userId);
 
-            if (error) throw error;
+            if (profileError) throw profileError;
+
+            // Add to project_members table
+            const { error: teamMemberError } = await supabase
+                .from('project_members')
+                .insert({
+                    project_id: selectedProject.id,
+                    user_id: userId,
+                    role: role.toLowerCase()
+                });
+
+            if (teamMemberError) throw teamMemberError;
+
             fetchHierarchy();
             setShowAddMemberModal(false);
         } catch (err) {
@@ -309,7 +324,7 @@ const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
                                 <div>
                                     <div style={{ fontWeight: 600 }}>{user.full_name}</div>
                                     <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                                        {user.role} • {user.teams?.team_name || 'Unassigned'} • {user.email}
+                                        {user.role} • {user.email}
                                     </div>
                                 </div>
                                 {selectedUser?.id === user.id && <Check size={16} color="#2563eb" />}
@@ -498,7 +513,7 @@ const ProjectHierarchyDemo = ({ isEditingEnabled = false }) => {
                     </div>
                 </div>
 
-                {/* Level 2: Team Leads */}
+                {/* Level 2: Project Leads */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
                     {selectedProject.leads.length > 0 ? (
                         <>

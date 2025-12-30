@@ -161,24 +161,24 @@ const DashboardHome = () => {
                 });
                 setTimeline(combinedEvents);
 
-                // Fetch teams for analytics
-                const { data: teamsData } = await supabase
-                    .from('teams')
-                    .select('id, team_name');
+                // Fetch projects for analytics
+                const { data: projectsData } = await supabase
+                    .from('projects')
+                    .select('id, name');
 
-                const teams = teamsData ? teamsData.map(t => ({ id: t.id, name: t.team_name })) : [];
+                const projects = projectsData ? projectsData.map(p => ({ id: p.id, name: p.name })) : [];
 
-                if (teams.length > 0) setAllTeams(teams);
+                if (projects.length > 0) setAllTeams(projects);
 
-                if (teams && employees && tasks) {
-                    const analytics = teams.map(team => {
-                        const teamEmployees = employees.filter(e => e.team_id === team.id);
-                        const teamEmployeeIds = teamEmployees.map(e => e.id);
+                if (projects && employees && tasks) {
+                    const analytics = projects.map(project => {
+                        const projectEmployees = employees.filter(e => e.team_id === project.id);
+                        const projectEmployeeIds = projectEmployees.map(e => e.id);
 
-                        // Calculate Team Performance
-                        const teamTasks = tasks.filter(t => teamEmployeeIds.includes(t.assigned_to));
-                        const completedTasks = teamTasks.filter(t => ['completed', 'done'].includes(t.status?.toLowerCase())).length;
-                        const totalTasks = teamTasks.length;
+                        // Calculate Project Performance
+                        const projectTasks = tasks.filter(t => projectEmployeeIds.includes(t.assigned_to));
+                        const completedTasks = projectTasks.filter(t => ['completed', 'done'].includes(t.status?.toLowerCase())).length;
+                        const totalTasks = projectTasks.length;
 
                         const performance = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
@@ -200,9 +200,9 @@ const DashboardHome = () => {
                         }
 
                         return {
-                            id: team.id,
-                            name: team.name,
-                            count: teamEmployees.length,
+                            id: project.id,
+                            name: project.name,
+                            count: projectEmployees.length,
                             performance: performance,
                             projects: Math.floor(Math.random() * 10) + 5, // Placeholder
                             status: status,
@@ -409,7 +409,7 @@ const DashboardHome = () => {
 
                     {/* Team Analytics Card (Green) - Moved to Bottom, Full Width */}
                     <div style={{ backgroundColor: '#bbf7d0', borderRadius: '24px', padding: '24px', display: 'flex', flexDirection: 'column', minHeight: '200px' }}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#14532d', marginBottom: '16px' }}>Team Wise Status:</h3>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#14532d', marginBottom: '16px' }}>Project Wise Status:</h3>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             {teamAnalytics.map((team) => (
@@ -670,7 +670,7 @@ const DashboardHome = () => {
                                             checked={eventScope === 'team'}
                                             onChange={() => setEventScope('team')}
                                         />
-                                        Entire Team(s)
+                                        Entire Project(s)
                                     </label>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                         <input

@@ -57,13 +57,13 @@ const TaskManagement = () => {
     const fetchTeamMembers = async () => {
         try {
             const { data, error } = await supabase
-                .from('team_members')
+                .from('project_members')
                 .select(`
-                    profile_id,
-                    role_in_project,
-                    profiles:profile_id (id, full_name, email)
+                    user_id,
+                    role,
+                    profiles:user_id (id, full_name, email)
                 `)
-                .eq('team_id', currentProject.id);
+                .eq('project_id', currentProject.id);
 
             if (error) throw error;
             setTeamMembers(data?.filter(m => m.profiles) || []);
@@ -280,8 +280,8 @@ const TaskManagement = () => {
                             >
                                 <option value="">Select team member</option>
                                 {teamMembers.map(m => (
-                                    <option key={m.profile_id} value={m.profile_id}>
-                                        {m.profiles?.full_name || m.profiles?.email} ({m.role_in_project})
+                                    <option key={m.user_id} value={m.user_id}>
+                                        {m.profiles?.full_name || m.profiles?.email} ({m.role})
                                     </option>
                                 ))}
                             </select>

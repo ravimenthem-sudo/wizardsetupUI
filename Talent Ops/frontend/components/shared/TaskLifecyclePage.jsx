@@ -38,8 +38,8 @@ const TaskLifecyclePage = ({ userRole = 'employee', userId, addToast, projectRol
     const [teamMembers, setTeamMembers] = useState([]);
     const [newTask, setNewTask] = useState({ title: '', description: '', assigned_to: '', due_date: '', priority: 'medium' });
 
-    // Check if user can add tasks - check both org role and project role
-    const isManager = userRole === 'manager' || userRole === 'team_lead' || projectRole === 'manager' || projectRole === 'team_lead';
+    // Check if user can add tasks - only for org managers or project managers
+    const isManager = userRole === 'manager' || projectRole === 'manager';
 
     useEffect(() => {
         fetchTasks();
@@ -49,17 +49,17 @@ const TaskLifecyclePage = ({ userRole = 'employee', userId, addToast, projectRol
     const fetchTeamMembers = async () => {
         console.log('🔍 fetchTeamMembers called, currentProjectId:', currentProjectId);
         try {
-            // First try to fetch team members from the current project
+            // First try to fetch project members from the current project
             const { data, error } = await supabase
-                .from('team_members')
+                .from('project_members')
                 .select(`
-                    profile_id,
-                    role_in_project,
-                    profiles:profile_id (id, full_name, email, role)
+                    user_id,
+                    role,
+                    profiles:user_id (id, full_name, email, role)
                 `)
-                .eq('team_id', currentProjectId);
+                .eq('project_id', currentProjectId);
 
-            console.log('📋 team_members query result:', { data, error, count: data?.length });
+            console.log('📋 project_members query result:', { data, error, count: data?.length });
 
             if (!error && data && data.length > 0) {
                 // Transform to flat structure for dropdown
@@ -67,12 +67,12 @@ const TaskLifecyclePage = ({ userRole = 'employee', userId, addToast, projectRol
                     id: m.profiles.id,
                     full_name: m.profiles.full_name,
                     email: m.profiles.email,
-                    role: m.role_in_project || m.profiles.role
+                    role: m.role || m.profiles.role
                 }));
                 setTeamMembers(members);
             } else {
-                // Fallback: if no team_members, fetch all profiles (for projects without team setup)
-                console.log('⚠️ No team_members found, falling back to all profiles');
+                // Fallback: if no project_members, fetch all profiles (for projects without member setup)
+                console.log('⚠️ No project_members found, falling back to all profiles');
                 const { data: profiles, error: profError } = await supabase
                     .from('profiles')
                     .select('id, full_name, email, role');

@@ -26,17 +26,23 @@ const AnalyticsDemo = () => {
                     setTotalHeadcount(count || 0);
                 }
 
-                // Fetch Teams
+                // Fetch Projects (replacing teams)
                 const { data: teamsData, error: teamsError } = await supabase
-                    .from('teams')
-                    .select('id, team_name');
+                    .from('projects')
+                    .select('id, name');
 
                 if (teamsError) throw teamsError;
 
-                // Fetch Employees with Team info
+                // Fetch Employees with Project assignments from project_members
+                const { data: teamMembersData, error: teamMembersError } = await supabase
+                    .from('project_members')
+                    .select('user_id, project_id');
+
+                if (teamMembersError) console.error('Error fetching project members:', teamMembersError);
+
                 const { data: employeesData, error: employeesError } = await supabase
                     .from('profiles')
-                    .select('id, full_name, role, team_id');
+                    .select('id, full_name, role');
 
                 if (employeesError) throw employeesError;
 
@@ -53,7 +59,12 @@ const AnalyticsDemo = () => {
 
                 if (teamsData) {
                     teamsData.forEach(team => {
-                        const teamEmployees = employeesData.filter(e => e.team_id === team.id);
+                        // Get employees for this project from project_members
+                        const projectMemberIds = teamMembersData
+                            ?.filter(tm => tm.project_id === team.id)
+                            .map(tm => tm.user_id) || [];
+
+                        const teamEmployees = employeesData.filter(e => projectMemberIds.includes(e.id));
                         let teamActiveTasks = 0;
 
                         const empList = teamEmployees.map(emp => {
@@ -84,7 +95,7 @@ const AnalyticsDemo = () => {
 
                         teamStats.push({
                             id: team.id,
-                            name: team.team_name,
+                            name: team.name,
                             lead: 'N/A', // You might want to fetch team lead specifically if you have that data
                             count: teamEmployees.length,
                             activeTasks: teamActiveTasks,

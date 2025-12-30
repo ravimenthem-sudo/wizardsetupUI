@@ -534,7 +534,7 @@ const DashboardHome = () => {
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                     <div style={{ backgroundColor: '#fff', padding: '32px', borderRadius: '24px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Add Team Member</h3>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Add Project Member</h3>
                             <button onClick={() => setShowAddEmployeeModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
                         </div>
                         <form onSubmit={handleAddEmployee} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -545,7 +545,7 @@ const DashboardHome = () => {
                                 <option>Design</option>
                                 <option>Product</option>
                             </select>
-                            <button type="submit" style={{ backgroundColor: '#000', color: '#fff', padding: '12px', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginTop: '8px' }}>Add Team Member</button>
+                            <button type="submit" style={{ backgroundColor: '#000', color: '#fff', padding: '12px', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginTop: '8px' }}>Add Project Member</button>
                         </form>
                     </div>
                 </div>
@@ -573,7 +573,7 @@ const DashboardHome = () => {
                                             checked={eventScope === 'team'}
                                             onChange={() => { setEventScope('team'); setSelectedEventMembers([]); }}
                                         />
-                                        My Team
+                                        My Project
                                     </label>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                         <input
@@ -596,7 +596,7 @@ const DashboardHome = () => {
                                         const currentList = eventScope === 'team' ? teamMembers : allOrgEmployees;
                                         return (
                                             <>
-                                                {/* Select All Option - Only for My Team */}
+                                                {/* Select All Option - Only for My Project */}
                                                 {eventScope === 'team' && (
                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px', fontWeight: 'bold', borderBottom: '1px solid #f1f5f9' }}>
                                                         <input

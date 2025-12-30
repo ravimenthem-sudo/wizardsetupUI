@@ -7,6 +7,8 @@ import DashboardHome from '../employee/pages/DashboardHome';
 // @ts-ignore
 import ModulePage from '../employee/pages/ModulePage';
 // @ts-ignore
+import OrgHierarchy from '../employee/pages/OrgHierarchy';
+// @ts-ignore
 import MessagingHub from '../shared/MessagingHub';
 // @ts-ignore
 import { ToastProvider } from '../employee/context/ToastContext';
@@ -35,6 +37,7 @@ export const EmployeeDashboard = () => {
                                 <Route path="payslips" element={<ModulePage title="Your Payslip" type="payroll" />} />
                                 <Route path="policies" element={<ModulePage title="Policies" type="policies" />} />
                                 <Route path="hierarchy" element={<ModulePage title="Organizational Hierarchy" type="default" />} />
+                                <Route path="org-hierarchy" element={<OrgHierarchy />} />
                                 <Route path="project-hierarchy" element={<ModulePage title="Project Hierarchy" type="default" />} />
                                 <Route path="messages" element={<MessagingHub />} />
                                 <Route path="announcements" element={<ModulePage title="Announcements" type="default" />} />
