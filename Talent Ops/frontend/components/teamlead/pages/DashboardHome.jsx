@@ -416,7 +416,8 @@ const DashboardHome = () => {
                 </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '32px' }}>
+            {/* Main Content Grid */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[2.5fr_1fr] gap-8">
 
                 {/* Left Column: Cards Grid */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -425,29 +426,43 @@ const DashboardHome = () => {
                     <AttendanceTracker />
 
                     {/* Cards Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                        {/* Attendance Report Card (Yellow) */}
-                        <div style={{ backgroundColor: '#fef08a', borderRadius: '24px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '240px', position: 'relative', overflow: 'hidden' }}>
+                        {/* Employees Card (Yellow) */}
+                        <div
+                            onClick={() => navigate('/teamlead-dashboard/employee-status')}
+                            style={{
+                                backgroundColor: '#fef08a',
+                                borderRadius: '24px',
+                                padding: '24px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                minHeight: '240px',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
                             <div>
-                                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#854d0e' }}>Attendance Report:</h3>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#854d0e' }}>Employees:</h3>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '24px', marginTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '32px', marginTop: '16px' }}>
                                 <div>
-                                    <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>{attendanceStats.present}</span>
-                                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>Present</p>
-                                    <p style={{ fontSize: '0.8rem', color: '#854d0e' }}>Days</p>
+                                    <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>{employeeStats.active}</span>
+                                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>Active</p>
                                 </div>
                                 <div style={{ paddingTop: '12px' }}>
-                                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#854d0e' }}>{attendanceStats.absent}</span>
+                                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#854d0e' }}>{employeeStats.absent}</span>
                                     <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#854d0e' }}>Absent</p>
-                                    <p style={{ fontSize: '0.75rem', color: '#a16207' }}>Days</p>
                                 </div>
                                 <div style={{ paddingTop: '12px' }}>
-                                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#854d0e' }}>{attendanceStats.leaveBalance}</span>
-                                    <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#854d0e' }}>Leave Balance</p>
-                                    <p style={{ fontSize: '0.75rem', color: '#a16207' }}>Days</p>
+                                    <span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#854d0e' }}>{employeeStats.offline}</span>
+                                    <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#854d0e' }}>Offline</p>
                                 </div>
                             </div>
 
@@ -463,8 +478,38 @@ const DashboardHome = () => {
                             </div>
                         </div>
 
-                        {/* Notes Tile */}
-                        <NotesTile />
+                        {/* Task Status Card (Blue) */}
+                        <div
+                            onClick={() => navigate('/teamlead-dashboard/tasks')}
+                            style={{
+                                backgroundColor: '#bfdbfe', borderRadius: '24px', padding: '24px',
+                                display: 'flex', flexDirection: 'column', minHeight: '240px',
+                                position: 'relative', overflow: 'hidden', cursor: 'pointer',
+                                transition: 'transform 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '24px' }}>Task Status:</h3>
+
+                            <div className="flex flex-wrap gap-4 justify-between">
+                                <div>
+                                    <span style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>{taskStats.pending}</span>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#1e3a8a', marginTop: '4px' }}>PENDING</p>
+                                </div>
+                                <div>
+                                    <span style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>{taskStats.inProgress}</span>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#1e3a8a', marginTop: '4px' }}>IN PROGRESS</p>
+                                </div>
+                                <div>
+                                    <span style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>{taskStats.completed}</span>
+                                    <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#1e3a8a', marginTop: '4px' }}>COMPLETED</p>
+                                </div>
+                            </div>
+
+                            {/* Decorative Triangle */}
+                            <div style={{ position: 'absolute', bottom: 0, right: 0, width: '0', height: '0', borderStyle: 'solid', borderWidth: '0 0 100px 100px', borderColor: 'transparent transparent rgba(255,255,255,0.3) transparent' }}></div>
+                        </div>
                     </div>
 
                 </div>

@@ -294,7 +294,8 @@ const DashboardHome = () => {
             </div>
 
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '32px' }}>
+            {/* Main Content Grid */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[2.5fr_1fr] gap-8">
 
                 {/* Left Column: Cards Grid */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -303,7 +304,7 @@ const DashboardHome = () => {
                     <AttendanceTracker />
 
                     {/* Top Row Cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
 
                         {/* Attendance Report Card (Yellow) */}
                         <div style={{ backgroundColor: '#fef08a', borderRadius: '24px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '240px', position: 'relative', overflow: 'hidden' }}>
@@ -311,7 +312,7 @@ const DashboardHome = () => {
                                 <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#854d0e' }}>Attendance Report:</h3>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '24px', marginTop: '16px' }}>
+                            <div className="flex flex-wrap gap-6 mt-4">
                                 <div>
                                     <span style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>{attendanceStats.present}</span>
                                     <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>Present</p>

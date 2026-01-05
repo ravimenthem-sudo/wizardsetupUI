@@ -336,7 +336,8 @@ const DashboardHome = () => {
                 </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '32px' }}>
+            {/* Main Content Grid */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[2.5fr_1fr] gap-8">
 
                 {/* Left Column: Cards Grid */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -345,7 +346,7 @@ const DashboardHome = () => {
                     <AttendanceTracker />
 
                     {/* Top Row Cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                         {/* Employees Card (Yellow) */}
                         <div
@@ -411,7 +412,7 @@ const DashboardHome = () => {
                         >
                             <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '24px' }}>Task Status:</h3>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <div className="flex flex-wrap gap-4 justify-between">
                                 <div>
                                     <span style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>{taskStats.pending}</span>
                                     <p style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#1e3a8a', marginTop: '4px' }}>PENDING</p>
