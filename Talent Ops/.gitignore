@@ -1,53 +1,34 @@
 # Dependencies
-node_modules/
-.venv/
-venv/
-__pycache__/
-*.pyc
-*.pyo
+node_modules
+.pnp
+.pnp.js
 
+# Testing
+coverage
 
+# Production
+build
+dist
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Build outputs
-dist/
-build/
-*.egg-info/
-
-# Logs
-*.log
-npm-debug.log*
-
-# OS files
+# Misc
 .DS_Store
-Thumbs.db
-
-# Test coverage
-coverage/
-.coverage
-htmlcov/
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-
-# Supabase
-.supabase/
-
-# Gemini/AI artifacts (local only)
-.gemini/
-
-# Environment Variables
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-*.env
-*.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.idea
+.vscode
+*.swp
+*.swo
+
+# Docker
+Dockerfile
+.dockerignore
