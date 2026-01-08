@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Calendar, CheckCircle, Upload, FileText, Send, AlertCircle, Paperclip, ClipboardList, AlertTriangle, Eye, Clock } from 'lucide-react';
+import { Search, Calendar, CheckCircle, Upload, FileText, Send, AlertCircle, Paperclip, ClipboardList, AlertTriangle, Eye, Clock, Trash2, X } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useProject } from '../context/ProjectContext';
 import { useToast } from '../context/ToastContext';
@@ -139,7 +139,53 @@ const MyTasksPage = () => {
 
             const currentPhase = taskForProof.lifecycle_state;
             const currentIndex = getPhaseIndex(currentPhase);
-            const nextPhase = currentIndex < LIFECYCLE_PHASES.length - 2 ? LIFECYCLE_PHASES[currentIndex + 1].key : currentPhase;
+
+            // Auto-Advance Logic:
+            // Find the next phase that DOES NOT have a proof yet.
+            // Start checking from currentIndex + 1.
+            let nextPhase = currentPhase;
+            let foundNext = false;
+
+            if (currentIndex < LIFECYCLE_PHASES.length - 2) { // Ensure we don't go past Deployment
+                let probeIndex = currentIndex + 1;
+                while (probeIndex < LIFECYCLE_PHASES.length - 1) {
+                    const probePhaseKey = LIFECYCLE_PHASES[probeIndex].key;
+                    // Check if this phase already has a proof in the EXISTING validations (before this upload)
+                    // OR if we are just submitting it now (which is handled by the initial loop start)
+                    // Actually, we just need to skip phases that HAVE proofs.
+
+                    // Helper: Check if task has proof for this phase
+                    // We use the currentValidations (which doesn't include the one we are uploading yet, but that's for currentPhase)
+                    // We check if FUTURE phases have proofs.
+                    const hasProof = taskForProof.phase_validations &&
+                        taskForProof.phase_validations[probePhaseKey] &&
+                        (taskForProof.phase_validations[probePhaseKey].proof_url || taskForProof.phase_validations[probePhaseKey].proof_text);
+
+                    if (hasProof) {
+                        // This phase is already done, check next
+                        probeIndex++;
+                    } else {
+                        // Found a phase with no proof, this is our next target
+                        nextPhase = probePhaseKey;
+                        foundNext = true;
+                        break;
+                    }
+                }
+
+                // If we went through all subsequent phases and they ALL had proofs, 
+                // we should probably be at the very end (Deployment or Completed).
+                if (!foundNext && probeIndex >= LIFECYCLE_PHASES.length - 1) {
+                    // All intermediate phases done. 
+                    // If probeIndex reached "deployment" (last one usually), maybe set to deployment?
+                    // LIFECYCLE_PHASES usually ends with Deployment.
+                    // If we skipped everything up to Deployment, we should be AT Deployment.
+                    nextPhase = LIFECYCLE_PHASES[LIFECYCLE_PHASES.length - 1].key;
+                }
+            } else {
+                // Already at end
+                nextPhase = currentPhase;
+            }
+
 
             // Prepare updated validations object
             const currentValidations = taskForProof.phase_validations || {};
@@ -160,14 +206,8 @@ const MyTasksPage = () => {
                 updated_at: new Date().toISOString()
             };
 
-            // Only advance phase if we aren't already pending validation (prevent double skip if user re-uploads)
-            // But user said "every new proof updated" -> implies updating the proof.
-            // And "complete tasks without waiting" implies advancing.
-            // If already advanced (idx > current), we shouldn't advance again? 
-            // Wait, taskForProof.lifecycle_state IS the one displayed. If we advance, it changes.
-            // So we assume taskForProof is at the phase being submitted.
-
-            if (currentIndex < LIFECYCLE_PHASES.length - 2) {
+            // Only advance phase if we aren't already at the end
+            if (nextPhase !== currentPhase) {
                 updates.lifecycle_state = nextPhase;
                 updates.sub_state = 'in_progress'; // Reset substate for new phase
             }
@@ -200,6 +240,71 @@ const MyTasksPage = () => {
         } finally {
             setUploading(false);
             setUploadProgress(0);
+        }
+    };
+
+    const handleDeleteProof = async (task, phaseKey) => {
+        if (!window.confirm('Are you sure you want to delete this proof?')) return;
+
+        try {
+            const currentValidations = task.phase_validations || {};
+            const updatedValidations = { ...currentValidations };
+            let updates = {};
+
+            if (phaseKey === 'LEGACY_PROOF') {
+                updates.proof_url = null;
+                updates.lifecycle_state = 'design_guidance'; // Reset to first phase
+                updates.sub_state = 'in_progress';
+            } else {
+                if (updatedValidations[phaseKey]) {
+                    delete updatedValidations[phaseKey];
+                }
+
+                updates.phase_validations = updatedValidations;
+
+                // Determine if we need to revert the lifecycle state
+                const deletedPhaseIndex = LIFECYCLE_PHASES.findIndex(p => p.key === phaseKey);
+                const currentPhaseIndex = LIFECYCLE_PHASES.findIndex(p => p.key === task.lifecycle_state);
+
+                if (deletedPhaseIndex !== -1) {
+                    if (currentPhaseIndex > deletedPhaseIndex) {
+                        // Revert to the phase where proof was deleted
+                        updates.lifecycle_state = phaseKey;
+                        updates.sub_state = 'in_progress';
+                    } else if (currentPhaseIndex === deletedPhaseIndex) {
+                        // We are in the same phase, just ensure it's not marked as validation complete/pending if we just deleted the proof
+                        updates.sub_state = 'in_progress';
+                    }
+                }
+            }
+
+            // Common updates
+            updates.updated_at = new Date().toISOString();
+
+            const { error } = await supabase
+                .from('tasks')
+                .update(updates)
+                .eq('id', task.id);
+
+            if (error) throw error;
+
+            addToast('Proof deleted and status updated', 'success');
+
+            // Update local state if viewing the same task
+            if (taskForView && taskForView.id === task.id) {
+                setTaskForView({
+                    ...taskForView,
+                    phase_validations: updatedValidations,
+                    proof_url: phaseKey === 'LEGACY_PROOF' ? null : taskForView.proof_url,
+                    lifecycle_state: updates.lifecycle_state || taskForView.lifecycle_state,
+                    sub_state: updates.sub_state || taskForView.sub_state
+                });
+            }
+            fetchTasks(); // Refresh list
+
+        } catch (error) {
+            console.error('Error deleting proof:', error);
+            addToast('Failed to delete proof: ' + error.message, 'error');
         }
     };
 
@@ -329,6 +434,8 @@ const MyTasksPage = () => {
                     const status = validation?.status;
                     let color = '#e5e7eb'; // Default Grey
 
+                    const hasProof = validation?.proof_url || validation?.proof_text;
+
                     if (idx < currentIndex) {
                         // Past Phase
                         if (status === 'pending') color = '#f59e0b'; // Yellow (Still Pending)
@@ -338,6 +445,11 @@ const MyTasksPage = () => {
                         // Current Phase
                         if (status === 'pending' || subState === 'pending_validation') color = '#f59e0b'; // Yellow
                         else color = '#3b82f6'; // Blue
+                    } else if (hasProof) {
+                        // Future Phase but has proof (e.g. reverted state)
+                        if (status === 'pending') color = '#f59e0b';
+                        else if (status === 'rejected') color = '#fee2e2';
+                        else color = '#10b981';
                     }
                     // Future phases stay grey
 
@@ -596,10 +708,24 @@ const MyTasksPage = () => {
                                     {proofFile ? (
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
                                             <FileText size={32} color="#10b981" />
-                                            <div>
+                                            <div style={{ textAlign: 'left' }}>
                                                 <div style={{ fontWeight: 600, color: '#166534' }}>{proofFile.name}</div>
                                                 <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>{(proofFile.size / 1024).toFixed(1)} KB</div>
                                             </div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setProofFile(null); }}
+                                                style={{
+                                                    marginLeft: 'auto',
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    color: '#ef4444',
+                                                    padding: '4px'
+                                                }}
+                                                title="Remove file"
+                                            >
+                                                <X size={18} />
+                                            </button>
                                         </div>
                                     ) : (
                                         <>
@@ -632,26 +758,7 @@ const MyTasksPage = () => {
                                 />
                             </div>
 
-                            <div style={{ marginBottom: '20px' }}>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
-                                    Text Message / Notes (Optional)
-                                </label>
-                                <textarea
-                                    value={proofText}
-                                    onChange={(e) => setProofText(e.target.value)}
-                                    placeholder="Enter any notes, links, or description..."
-                                    rows={3}
-                                    style={{
-                                        width: '100%',
-                                        padding: '12px',
-                                        borderRadius: '10px',
-                                        border: '1px solid var(--border)',
-                                        backgroundColor: 'var(--background)',
-                                        fontSize: '0.9rem',
-                                        boxSizing: 'border-box'
-                                    }}
-                                />
-                            </div>
+
                         </div>
 
                         {uploading && (
@@ -848,43 +955,110 @@ const MyTasksPage = () => {
                         )}
 
                         {/* Validations History */}
-                        {(taskForView.phase_validations || taskForView.proof_url) && (
-                            <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#166534', marginBottom: '8px' }}>
-                                    <CheckCircle size={16} /> VALIDATION PROOFS
-                                </label>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {/* New System: Phase Validations */}
-                                    {taskForView.phase_validations && Object.entries(taskForView.phase_validations).map(([phaseKey, data]) => {
-                                        if (!data.proof_url) return null;
-                                        const phaseLabel = LIFECYCLE_PHASES.find(p => p.key === phaseKey)?.label || phaseKey;
-                                        return (
-                                            <div key={phaseKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #dcfce7' }}>
-                                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '10px' }}>
-                                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#166534', marginRight: '8px' }}>{phaseLabel}:</span>
-                                                    <span style={{ fontSize: '0.85rem', color: '#15803d' }}>{data.proof_url.split('/').pop()}</span>
-                                                </div>
-                                                <a href={data.proof_url} target="_blank" rel="noopener noreferrer"
-                                                    style={{ fontSize: '0.8rem', fontWeight: 600, color: '#166534', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
-                                                    View
-                                                </a>
-                                            </div>
-                                        );
-                                    })}
+                        {/* Validations History */}
+                        {(() => {
+                            const validations = taskForView.phase_validations || {};
+                            const legacyProof = taskForView.proof_url;
+                            const hasValidations = Object.values(validations).some(v => v.proof_url || v.proof_text);
+                            const hasLegacy = !!legacyProof && !hasValidations; // Only show legacy if no new validations
 
-                                    {/* Legacy Support (if no validations but proof_url exists) */}
-                                    {(!taskForView.phase_validations || Object.keys(taskForView.phase_validations).length === 0) && taskForView.proof_url && (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #dcfce7' }}>
-                                            <span style={{ fontSize: '0.85rem', color: '#15803d' }}>{taskForView.proof_url.split('/').pop()}</span>
-                                            <a href={taskForView.proof_url} target="_blank" rel="noopener noreferrer"
-                                                style={{ fontSize: '0.8rem', fontWeight: 600, color: '#166534', textDecoration: 'underline' }}>
-                                                View
-                                            </a>
-                                        </div>
-                                    )}
+                            if (!hasValidations && !hasLegacy) return null;
+
+                            return (
+                                <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#166534', marginBottom: '8px' }}>
+                                        <CheckCircle size={16} /> VALIDATION PROOFS
+                                    </label>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        {/* New System: Phase Validations */}
+                                        {Object.entries(validations).map(([phaseKey, data]) => {
+                                            if (!data.proof_url && !data.proof_text) return null;
+                                            const phaseLabel = LIFECYCLE_PHASES.find(p => p.key === phaseKey)?.label || phaseKey;
+                                            return (
+                                                <div key={phaseKey} style={{ padding: '12px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: data.proof_text ? '8px' : '0' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#166534' }}>{phaseLabel}:</span>
+                                                            {data.proof_url && (
+                                                                <span style={{ fontSize: '0.85rem', color: '#15803d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                                                                    {data.proof_url.split('/').pop()}
+                                                                </span>
+                                                            )}
+                                                            {!data.proof_url && <span style={{ fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>Text Submission</span>}
+                                                        </div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                            {data.proof_url && (
+                                                                <a href={data.proof_url} target="_blank" rel="noopener noreferrer"
+                                                                    style={{ fontSize: '0.8rem', fontWeight: 600, color: '#166534', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+                                                                    View File
+                                                                </a>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleDeleteProof(taskForView, phaseKey)}
+                                                                style={{
+                                                                    background: 'none',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    color: '#ef4444',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    padding: '4px',
+                                                                    borderRadius: '4px'
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                                title="Delete Proof"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    {data.proof_text && (
+                                                        <div style={{ fontSize: '0.85rem', color: '#334155', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', borderTop: '1px solid #f1f5f9', whiteSpace: 'pre-wrap' }}>
+                                                            {data.proof_text}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Legacy Support */}
+                                        {hasLegacy && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>[Legacy]</span>
+                                                    <span style={{ fontSize: '0.85rem', color: '#15803d' }}>{legacyProof.split('/').pop()}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <a href={legacyProof} target="_blank" rel="noopener noreferrer"
+                                                        style={{ fontSize: '0.8rem', fontWeight: 600, color: '#166534', textDecoration: 'underline' }}>
+                                                        View File
+                                                    </a>
+                                                    <button
+                                                        onClick={() => handleDeleteProof(selectedTaskForView, 'LEGACY_PROOF')}
+                                                        style={{
+                                                            background: 'none',
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            color: '#ef4444',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            padding: '4px',
+                                                            borderRadius: '4px'
+                                                        }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                        title="Delete Legacy Proof"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            );
+                        })()}
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                             <button

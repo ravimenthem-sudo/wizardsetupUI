@@ -73,6 +73,80 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
         }
     }, [userId, currentProject?.id, userRole, viewMode]);
 
+    const handleDeleteProof = async (task, phaseKey) => {
+        if (!window.confirm('Are you sure you want to delete this proof?')) return;
+
+        try {
+            const currentValidations = task.phase_validations || {};
+            const updatedValidations = { ...currentValidations };
+            let updates = {};
+
+            if (phaseKey === 'LEGACY_PROOF') {
+                updates.proof_url = null;
+                updates.lifecycle_state = 'design_guidance'; // Reset to first phase
+                updates.sub_state = 'in_progress';
+            } else {
+                if (updatedValidations[phaseKey]) {
+                    delete updatedValidations[phaseKey];
+                }
+
+                updates.phase_validations = updatedValidations;
+
+                // Determine if we need to revert the lifecycle state
+                const deletedPhaseIndex = LIFECYCLE_PHASES.findIndex(p => p.key === phaseKey);
+                const currentPhaseIndex = LIFECYCLE_PHASES.findIndex(p => p.key === task.lifecycle_state);
+
+                if (deletedPhaseIndex !== -1) {
+                    if (currentPhaseIndex > deletedPhaseIndex) {
+                        // Revert to the phase where proof was deleted
+                        updates.lifecycle_state = phaseKey;
+                        updates.sub_state = 'in_progress';
+                    } else if (currentPhaseIndex === deletedPhaseIndex) {
+                        // We are in the same phase, just ensure it's not marked as validation complete/pending if we just deleted the proof
+                        updates.sub_state = 'in_progress';
+                    }
+                }
+            }
+
+            // Common updates
+            updates.updated_at = new Date().toISOString();
+
+            const { error } = await supabase
+                .from('tasks')
+                .update(updates)
+                .eq('id', task.id);
+
+            if (error) throw error;
+
+            addToast('Proof deleted and status updated', 'success');
+
+            // Update local state if viewing the same task
+            if (selectedTask && selectedTask.id === task.id) {
+                setSelectedTask({
+                    ...selectedTask,
+                    phase_validations: updatedValidations,
+                    proof_url: phaseKey === 'LEGACY_PROOF' ? null : selectedTask.proof_url,
+                    lifecycle_state: updates.lifecycle_state || selectedTask.lifecycle_state,
+                    sub_state: updates.sub_state || selectedTask.sub_state
+                });
+            }
+
+            // Update tasks list if needed (optional optimization)
+            setTasks(prev => prev.map(t =>
+                t.id === task.id ? {
+                    ...t,
+                    phase_validations: updatedValidations,
+                    lifecycle_state: updates.lifecycle_state || t.lifecycle_state,
+                    sub_state: updates.sub_state || t.sub_state
+                } : t
+            ));
+
+        } catch (error) {
+            console.error('Error deleting proof:', error);
+            addToast('Failed to delete proof: ' + error.message, 'error');
+        }
+    };
+
     const fetchEmployees = async () => {
         try {
             let formattedEmployees = [];
@@ -709,7 +783,42 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
             // 2. Update Task
             const currentPhase = taskForProof.lifecycle_state;
             const currentIndex = getPhaseIndex(currentPhase);
-            const nextPhase = currentIndex < LIFECYCLE_PHASES.length - 2 ? LIFECYCLE_PHASES[currentIndex + 1].key : currentPhase;
+
+            // Auto-Advance Logic:
+            // Find the next phase that DOES NOT have a proof yet.
+            let nextPhase = currentPhase;
+            let foundNext = false;
+
+            if (currentIndex < LIFECYCLE_PHASES.length - 2) { // Ensure we don't go past Deployment
+                let probeIndex = currentIndex + 1;
+                while (probeIndex < LIFECYCLE_PHASES.length - 1) {
+                    const probePhaseKey = LIFECYCLE_PHASES[probeIndex].key;
+                    // Check if this phase already has a proof in the EXISTING validations (before this upload)
+                    const hasProof = taskForProof.phase_validations &&
+                        taskForProof.phase_validations[probePhaseKey] &&
+                        (taskForProof.phase_validations[probePhaseKey].proof_url || taskForProof.phase_validations[probePhaseKey].proof_text);
+
+                    if (hasProof) {
+                        // This phase is already done, check next
+                        probeIndex++;
+                    } else {
+                        // Found a phase with no proof, this is our next target
+                        nextPhase = probePhaseKey;
+                        foundNext = true;
+                        break;
+                    }
+                }
+
+                // If we went through all subsequent phases and they ALL had proofs, 
+                // we should probably be at the very end (Deployment or Completed).
+                if (!foundNext && probeIndex >= LIFECYCLE_PHASES.length - 1) {
+                    // All intermediate phases done. 
+                    nextPhase = LIFECYCLE_PHASES[LIFECYCLE_PHASES.length - 1].key;
+                }
+            } else {
+                // Already at end
+                nextPhase = currentPhase;
+            }
 
             const currentValidations = taskForProof.phase_validations || {};
 
@@ -737,7 +846,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
             if (proofUrl) updates.proof_url = proofUrl;
 
             // Advance Phase Logic
-            if (currentIndex < LIFECYCLE_PHASES.length - 2) {
+            if (nextPhase !== currentPhase) {
                 updates.lifecycle_state = nextPhase;
                 updates.sub_state = 'in_progress';
             }
@@ -790,6 +899,8 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                     let color = '#e5e7eb'; // Default Grey
                     let isYellow = false;
 
+                    const hasProof = validation?.proof_url || validation?.proof_text;
+
                     if (idx < currentIndex) {
                         // Past Phase
                         if (status === 'pending') { color = '#f59e0b'; isYellow = true; }
@@ -799,6 +910,11 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                         // Current Phase
                         if (status === 'pending' || subState === 'pending_validation') { color = '#f59e0b'; isYellow = true; }
                         else color = '#3b82f6';
+                    } else if (hasProof) {
+                        // Future Phase but has proof (e.g. reverted state)
+                        if (status === 'pending') { color = '#f59e0b'; isYellow = true; }
+                        else if (status === 'rejected') color = '#fee2e2';
+                        else color = '#10b981'; // Assuming green if exists or approved
                     }
 
                     const isCompleted = color === '#10b981';
@@ -1772,6 +1888,8 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                                                 let color = '#e5e7eb'; // Default Grey
                                                 let isYellow = false;
 
+                                                const hasProof = validation?.proof_url || validation?.proof_text;
+
                                                 if (idx < currentIndex) {
                                                     // Past Phase
                                                     if (status === 'pending') { color = '#f59e0b'; isYellow = true; } // Yellow
@@ -1781,6 +1899,11 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                                                     // Current Phase
                                                     if (status === 'pending' || selectedTask.sub_state === 'pending_validation') { color = '#f59e0b'; isYellow = true; } // Yellow
                                                     else color = '#3b82f6'; // Blue
+                                                } else if (hasProof) {
+                                                    // Future Phase but has proof (e.g. reverted state)
+                                                    if (status === 'pending') { color = '#f59e0b'; isYellow = true; }
+                                                    else if (status === 'rejected') color = '#fee2e2';
+                                                    else color = '#10b981'; // Assuming green if exists or approved
                                                 }
 
                                                 const isCompleted = color === '#10b981';
@@ -1919,60 +2042,112 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                                 </div>
 
                                 {/* Validations History */}
-                                {(selectedTask.phase_validations || selectedTask.proof_url) && (
-                                    <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>
-                                            <CheckCircle2 size={16} /> Submitted Proofs
-                                        </label>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            {/* New System */}
-                                            {selectedTask.phase_validations && Object.entries(selectedTask.phase_validations).map(([phaseKey, data]) => {
-                                                if (!data.proof_url && !data.proof_text) return null;
-                                                const phaseLabel = LIFECYCLE_PHASES.find(p => p.key === phaseKey)?.label || phaseKey;
-                                                return (
-                                                    <div key={phaseKey} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>{phaseLabel}:</span>
-                                                                {data.proof_url && (
-                                                                    <span style={{ fontSize: '0.9rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
-                                                                        {data.proof_url.split('/').pop()}
-                                                                    </span>
-                                                                )}
+                                {(() => {
+                                    const validations = selectedTask.phase_validations || {};
+                                    const legacyProof = selectedTask.proof_url;
+                                    const hasValidations = Object.values(validations).some(v => v.proof_url || v.proof_text);
+                                    const hasLegacy = !!legacyProof && !hasValidations;
+
+                                    if (!hasValidations && !hasLegacy) return null;
+
+                                    return (
+                                        <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>
+                                                <CheckCircle2 size={16} /> Submitted Proofs
+                                            </label>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {/* New System */}
+                                                {Object.entries(validations).map(([phaseKey, data]) => {
+                                                    if (!data.proof_url && !data.proof_text) return null;
+                                                    const phaseLabel = LIFECYCLE_PHASES.find(p => p.key === phaseKey)?.label || phaseKey;
+                                                    return (
+                                                        <div key={phaseKey} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>{phaseLabel}:</span>
+                                                                    {data.proof_url && (
+                                                                        <span style={{ fontSize: '0.9rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                                                                            {data.proof_url.split('/').pop()}
+                                                                        </span>
+                                                                    )}
+                                                                    {!data.proof_url && <span style={{ fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>Text Submission</span>}
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                                    {data.proof_url && (
+                                                                        <a href={data.proof_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#3b82f6', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none' }}>
+                                                                            View <ExternalLink size={12} />
+                                                                        </a>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => handleDeleteProof(selectedTask, phaseKey)}
+                                                                        style={{
+                                                                            background: 'none',
+                                                                            border: 'none',
+                                                                            cursor: 'pointer',
+                                                                            color: '#ef4444',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            padding: '4px',
+                                                                            borderRadius: '4px'
+                                                                        }}
+                                                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
+                                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                                        title="Delete Proof"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                            {data.proof_url && (
-                                                                <a href={data.proof_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#3b82f6', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none' }}>
-                                                                    View <ExternalLink size={12} />
-                                                                </a>
+                                                            {data.proof_text && (
+                                                                <div style={{ fontSize: '0.85rem', color: '#475569', backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '4px', marginTop: '4px' }}>
+                                                                    <span style={{ fontWeight: 600, fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '2px' }}>NOTE:</span>
+                                                                    {data.proof_text}
+                                                                </div>
                                                             )}
                                                         </div>
-                                                        {data.proof_text && (
-                                                            <div style={{ fontSize: '0.85rem', color: '#475569', backgroundColor: '#f1f5f9', padding: '8px', borderRadius: '4px', marginTop: '4px' }}>
-                                                                <span style={{ fontWeight: 600, fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '2px' }}>NOTE:</span>
-                                                                {data.proof_text}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+                                                    );
+                                                })}
 
-                                            {/* Legacy Support - ONLY if no validations entries found */}
-                                            {(!selectedTask.phase_validations || Object.keys(selectedTask.phase_validations).length === 0) && selectedTask.proof_url && (
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>[Legacy]</span>
-                                                        <span style={{ fontSize: '0.9rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
-                                                            {selectedTask.proof_url.split('/').pop()}
-                                                        </span>
+                                                {/* Legacy Support */}
+                                                {hasLegacy && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>[Legacy]</span>
+                                                            <span style={{ fontSize: '0.9rem', color: '#64748b' }}>{legacyProof.split('/').pop()}</span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <a href={legacyProof} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#3b82f6', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none' }}>
+                                                                View <ExternalLink size={12} />
+                                                            </a>
+                                                            <button
+                                                                onClick={() => handleDeleteProof(selectedTask, 'LEGACY_PROOF')}
+                                                                style={{
+                                                                    background: 'none',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    color: '#ef4444',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    padding: '4px',
+                                                                    borderRadius: '4px'
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fee2e2'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                                title="Delete Legacy Proof"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <a href={selectedTask.proof_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#3b82f6', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none' }}>
-                                                        View <ExternalLink size={12} />
-                                                    </a>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
+
+
+
+
                             </div>
 
                             {/* Modal Footer */}
@@ -2036,7 +2211,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                                 )}
                             </div>
                         </div>
-                    </div>
+                    </div >
                 )
             }
 
@@ -2323,6 +2498,20 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                                                 <div style={{ fontWeight: 600, color: '#166534', fontSize: '0.95rem' }}>{proofFile.name}</div>
                                                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{(proofFile.size / 1024).toFixed(1)} KB</div>
                                             </div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setProofFile(null); }}
+                                                style={{
+                                                    marginLeft: 'auto',
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    color: '#ef4444',
+                                                    padding: '4px'
+                                                }}
+                                                title="Remove file"
+                                            >
+                                                <X size={18} />
+                                            </button>
                                         </div>
                                     ) : (
                                         <>
