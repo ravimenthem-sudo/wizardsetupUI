@@ -4,10 +4,14 @@ import { supabase } from '../../lib/supabaseClient';
 import { supabaseRequest } from '../../lib/supabaseRequest';
 import { useProject } from '../employee/context/ProjectContext';
 
-const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId, addToast, viewMode = 'default' }) => {
+const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId, addToast, viewMode = 'default', projectId, onBack }) => {
     const { currentProject, projectRole: contextProjectRole } = useProject();
-    // Use context role if available (meaning we are in a project context), otherwise prop
-    const effectiveProjectRole = currentProject ? contextProjectRole : projectRole;
+
+    // Determine which project ID to use: Prop takes precedence over context
+    const effectiveProjectId = projectId || currentProject?.id;
+
+    // Use context role if available AND we are using context project, otherwise prop
+    const effectiveProjectRole = (currentProject && !projectId) ? contextProjectRole : projectRole;
 
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -63,7 +67,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
     });
 
     useEffect(() => {
-        if (currentProject?.id || userRole === 'executive') {
+        if (effectiveProjectId || userRole === 'executive') {
             fetchData();
             if (userRole === 'manager' || userRole === 'executive') {
                 fetchEmployees();
@@ -71,7 +75,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
         } else {
             setLoading(false);
         }
-    }, [userId, currentProject?.id, userRole, viewMode]);
+    }, [userId, effectiveProjectId, userRole, viewMode]);
 
     const handleDeleteProof = async (task, phaseKey) => {
         if (!window.confirm('Are you sure you want to delete this proof?')) return;
@@ -287,20 +291,20 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                     addToast
                 );
             } else {
-                if (!currentProject?.id) {
+                if (!effectiveProjectId) {
                     setLoading(false);
                     return;
                 }
 
                 // 1. Fetch simplified tasks for the current project
                 // Explicitly select phase_validations to ensure lifecycle sync for team members
-                let query = supabase.from('tasks').select('*, phase_validations').eq('project_id', currentProject.id);
+                let query = supabase.from('tasks').select('*, phase_validations').eq('project_id', effectiveProjectId);
 
                 // Filter by role if not executive/manager/team_lead for this project
                 // We assume strict project-level permissions override global permissions for tasks view
                 const isProjectAdmin = ['manager', 'team_lead'].includes(effectiveProjectRole);
 
-                console.log('DEBUG: AllTasksView Fetch', { viewMode, userId, projectId: currentProject.id });
+                console.log('DEBUG: AllTasksView Fetch', { viewMode, userId, projectId: effectiveProjectId });
 
                 if (viewMode === 'my_tasks') {
                     // Force filter to show ONLY tasks assigned to this user
@@ -357,7 +361,6 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
             const enhancedTasks = (tasksData || []).map(task => {
                 return {
                     ...task,
-                    ...task,
                     assignee_name: profileMap[task.assigned_to]?.name || 'Unassigned',
                     assignee_avatar: profileMap[task.assigned_to]?.avatar,
                     project_name: (userRole === 'executive' ? projectMap[task.project_id] : currentProject?.name) || 'Unknown Project'
@@ -412,7 +415,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                     description: newTask.description,
                     assigned_to: empId,
                     assigned_by: user.id,
-                    project_id: currentProject?.id,
+                    project_id: effectiveProjectId,
                     start_date: newTask.startDate,
                     due_date: newTask.endDate,
                     due_time: newTask.dueTime || null,
@@ -445,7 +448,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                     description: newTask.description,
                     assigned_to: newTask.assignType === 'individual' ? newTask.assignedTo : null,
                     assigned_by: user.id,
-                    project_id: currentProject?.id,
+                    project_id: effectiveProjectId,
                     start_date: newTask.startDate,
                     due_date: newTask.endDate,
                     due_time: newTask.dueTime || null,
@@ -578,21 +581,10 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
             // Legacy Support/Cleanup:
             // If the task was strictly in 'pending_validation' sub_state (legacy blocking), we advance it?
             // User said "all yellow become green".
-            // If we are in legacy mode, we might need to advance.
-            if (selectedTask.sub_state === 'pending_validation') {
-                // Advance logic for legacy blocking tasks
-                const phases = ['requirement_refiner', 'design_guidance', 'build_guidance', 'acceptance_criteria', 'deployment', 'closed'];
-                const currentIdx = phases.indexOf(selectedTask.lifecycle_state || 'requirement_refiner');
-                const nextPhase = phases[currentIdx + 1] || 'closed';
-
-                updates.sub_state = 'in_progress';
-                updates.lifecycle_state = nextPhase;
-
-                if (nextPhase === 'closed') {
-                    updates.status = 'completed';
-                    updates.sub_state = 'approved';
-                }
-            }
+            // Phase advancing logic is typically handled by 'Next' flow, but here we just approve.
+            // If sub_state is pending_validation, we should probably set it to in_progress or leave it?
+            // Usually approval means "Proof Accepted".
+            updates.sub_state = 'in_progress';
 
             const { error } = await supabase
                 .from('tasks')
@@ -601,12 +593,41 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
 
             if (error) throw error;
 
-            addToast?.('Task validations approved!', 'success');
-            setSelectedTask(null);
+            addToast?.('Task approved successfully', 'success');
+            setShowIssueModal(false); // Reuse issue modal state? No, view modal
+            // We need to close View modal or update it
+            // Re-fetch will update list.
+            if (selectedTask) {
+                // Update local selected task to reflect changes immediately
+
+                // Check if the FINAL phase is approved. If so, mark task as completed.
+                // We relax the "All Phases" requirement because some intermediate phases might be auto-skipped or implicitly approved.
+                const phasesToCheck = updatedValidations.active_phases || LIFECYCLE_PHASES.map(p => p.key);
+                const lastPhaseKey = phasesToCheck[phasesToCheck.length - 1]; // e.g. 'deployment'
+                const isLastPhaseApproved = updatedValidations[lastPhaseKey]?.status === 'approved';
+
+                const finalStatus = isLastPhaseApproved ? 'completed' : selectedTask.status;
+
+                // Sync to DB if completed
+                if (isLastPhaseApproved && selectedTask.status !== 'completed') {
+                    await supabase.from('tasks').update({ status: 'completed' }).eq('id', selectedTask.id);
+                }
+
+                setSelectedTask({
+                    ...selectedTask,
+                    phase_validations: updatedValidations,
+                    sub_state: 'in_progress',
+                    status: finalStatus
+                });
+
+                if (finalStatus === 'completed') {
+                    addToast?.('Task marked as fully completed!', 'success');
+                }
+            }
             fetchData();
         } catch (error) {
             console.error('Error approving task:', error);
-            addToast?.('Failed to approve task', 'error');
+            addToast?.('Failed to approve task: ' + error.message, 'error');
         } finally {
             setProcessingApproval(false);
         }
@@ -875,7 +896,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
         }
     };
 
-    const LifecycleProgress = ({ currentPhase, subState, validations }) => {
+    const LifecycleProgress = ({ currentPhase, subState, validations, taskStatus }) => {
         let parsedValidations = validations;
         if (typeof validations === 'string') {
             try {
@@ -901,14 +922,17 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
 
                     const hasProof = validation?.proof_url || validation?.proof_text;
 
-                    if (idx < currentIndex) {
+                    if (taskStatus === 'completed') {
+                        color = '#10b981';
+                    } else if (idx < currentIndex) {
                         // Past Phase
                         if (status === 'pending') { color = '#f59e0b'; isYellow = true; }
                         else if (status === 'rejected') color = '#fee2e2';
                         else color = '#10b981';
                     } else if (idx === currentIndex) {
                         // Current Phase
-                        if (status === 'pending' || subState === 'pending_validation') { color = '#f59e0b'; isYellow = true; }
+                        if (status === 'approved') color = '#10b981';
+                        else if (status === 'pending' || subState === 'pending_validation') { color = '#f59e0b'; isYellow = true; }
                         else color = '#3b82f6';
                     } else if (hasProof) {
                         // Future Phase but has proof (e.g. reverted state)
@@ -938,7 +962,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                                 {isCompleted ? '✓' : phase.short}
                             </div>
                             {idx < filteredPhases.length - 1 && (
-                                <div style={{ width: '12px', height: '2px', backgroundColor: idx < currentIndex && !isYellow ? '#10b981' : '#e5e7eb' }} />
+                                <div style={{ width: '12px', height: '2px', backgroundColor: (isCompleted || (idx < currentIndex && !isYellow)) ? '#10b981' : '#e5e7eb' }} />
                             )}
                         </React.Fragment>
                     );
@@ -967,9 +991,21 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                    <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
-                        {viewMode === 'my_tasks' ? 'My Tasks' : (viewMode === 'team_tasks' ? 'All Project Tasks' : ((userRole === 'manager' || userRole === 'team_lead') && (!effectiveProjectRole || effectiveProjectRole === 'manager' || effectiveProjectRole === 'team_lead') ? 'Team Tasks' : 'Your Tasks'))}
-                    </h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {onBack && (
+                            <button
+                                onClick={onBack}
+                                style={{
+                                    background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#64748b'
+                                }}
+                            >
+                                <ChevronDown size={28} style={{ transform: 'rotate(90deg)' }} />
+                            </button>
+                        )}
+                        <h1 style={{ fontSize: '2rem', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+                            {viewMode === 'my_tasks' ? 'My Tasks' : (viewMode === 'team_tasks' ? 'All Project Tasks' : ((userRole === 'manager' || userRole === 'team_lead') && (!effectiveProjectRole || effectiveProjectRole === 'manager' || effectiveProjectRole === 'team_lead') ? 'Team Tasks' : 'Your Tasks'))}
+                        </h1>
+                    </div>
                     <p style={{ color: '#64748b', marginTop: '4px', fontSize: '0.95rem' }}>
                         {viewMode === 'my_tasks' ? 'Track your personal tasks through the lifecycle' : 'Manage and track all team tasks in one place'}
                     </p>
@@ -1181,7 +1217,7 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
                                                     </div>
                                                 </td>
                                                 <td style={{ padding: '16px', verticalAlign: 'middle' }}>
-                                                    <LifecycleProgress currentPhase={task.lifecycle_state} subState={task.sub_state} validations={task.phase_validations} />
+                                                    <LifecycleProgress currentPhase={task.lifecycle_state} subState={task.sub_state} validations={task.phase_validations} taskStatus={task.status} />
                                                 </td>
                                                 <td style={{ padding: '16px', verticalAlign: 'middle' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', whiteSpace: 'nowrap' }}>
@@ -1890,14 +1926,17 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
 
                                                 const hasProof = validation?.proof_url || validation?.proof_text;
 
-                                                if (idx < currentIndex) {
+                                                if (selectedTask.status === 'completed') {
+                                                    color = '#10b981';
+                                                } else if (idx < currentIndex) {
                                                     // Past Phase
                                                     if (status === 'pending') { color = '#f59e0b'; isYellow = true; } // Yellow
                                                     else if (status === 'rejected') color = '#fee2e2'; // Red
                                                     else color = '#10b981'; // Green
                                                 } else if (idx === currentIndex) {
                                                     // Current Phase
-                                                    if (status === 'pending' || selectedTask.sub_state === 'pending_validation') { color = '#f59e0b'; isYellow = true; } // Yellow
+                                                    if (status === 'approved') color = '#10b981';
+                                                    else if (status === 'pending' || selectedTask.sub_state === 'pending_validation') { color = '#f59e0b'; isYellow = true; } // Yellow
                                                     else color = '#3b82f6'; // Blue
                                                 } else if (hasProof) {
                                                     // Future Phase but has proof (e.g. reverted state)

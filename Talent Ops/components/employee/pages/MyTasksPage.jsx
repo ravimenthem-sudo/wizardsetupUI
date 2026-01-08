@@ -109,26 +109,28 @@ const MyTasksPage = () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('Not authenticated');
 
-            const fileExt = proofFile.name.split('.').pop();
-            const fileName = `${taskForProof.id}_${Date.now()}.${fileExt}`;
-            const filePath = `${user.id}/${fileName}`;
+            let proofUrl = null;
 
-            setUploadProgress(30);
+            if (proofFile) {
+                const fileExt = proofFile.name.split('.').pop();
+                const fileName = `${taskForProof.id}_${Date.now()}.${fileExt}`;
+                const filePath = `${user.id}/${fileName}`;
 
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('task-proofs')
-                .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
+                setUploadProgress(30);
 
-            if (uploadError) throw uploadError;
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('task-proofs')
+                    .upload(filePath, proofFile, { cacheControl: '3600', upsert: false });
 
-            setUploadProgress(70);
+                if (uploadError) throw uploadError;
 
-            const { data: urlData } = supabase.storage.from('task-proofs').getPublicUrl(filePath);
-            const proofUrl = urlData?.publicUrl || filePath;
+                setUploadProgress(70);
 
-            setUploadProgress(85);
+                const { data: urlData } = supabase.storage.from('task-proofs').getPublicUrl(filePath);
+                proofUrl = urlData?.publicUrl || filePath;
 
-            setUploadProgress(85);
+                setUploadProgress(85);
+            }
 
             let responseData;
             let responseError;
@@ -402,7 +404,7 @@ const MyTasksPage = () => {
     ];
     const getPhaseIndex = (phase) => LIFECYCLE_PHASES.findIndex(p => p.key === phase);
 
-    const LifecycleProgress = ({ currentPhase, subState, validations }) => {
+    const LifecycleProgress = ({ currentPhase, subState, validations, taskStatus }) => {
         let parsedValidations = validations;
         if (typeof validations === 'string') {
             try {
@@ -436,7 +438,9 @@ const MyTasksPage = () => {
 
                     const hasProof = validation?.proof_url || validation?.proof_text;
 
-                    if (idx < currentIndex) {
+                    if (taskStatus === 'completed') {
+                        color = '#10b981';
+                    } else if (idx < currentIndex) {
                         // Past Phase
                         if (status === 'pending') color = '#f59e0b'; // Yellow (Still Pending)
                         else if (status === 'rejected') color = '#fee2e2'; // Red
@@ -569,6 +573,7 @@ const MyTasksPage = () => {
                                                 currentPhase={task.lifecycle_state}
                                                 subState={task.sub_state}
                                                 validations={task.phase_validations}
+                                                taskStatus={task.status}
                                             />
                                         </td>
                                         <td style={{ padding: '16px' }}>
@@ -583,38 +588,80 @@ const MyTasksPage = () => {
                                             </div>
                                         </td>
                                         <td style={{ padding: '16px', textAlign: 'center' }}>
-                                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', whiteSpace: 'nowrap' }}>
-                                                <button
-                                                    onClick={() => openViewModal(task)}
-                                                    style={{
-                                                        padding: '6px 10px',
-                                                        borderRadius: '6px',
-                                                        backgroundColor: '#eff6ff',
-                                                        color: '#1d4ed8',
-                                                        border: '1px solid #bfdbfe',
-                                                        fontWeight: 500,
-                                                        cursor: 'pointer',
+                                            {task.status === 'completed' ? (
+                                                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                                    <span style={{
+                                                        padding: '6px 12px',
+                                                        borderRadius: '20px',
+                                                        backgroundColor: '#dcfce7',
+                                                        color: '#166534',
+                                                        fontSize: '0.8rem',
+                                                        fontWeight: 600,
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
-                                                        gap: '4px',
-                                                        fontSize: '0.75rem',
-                                                        transition: 'background-color 0.2s',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
-                                                >
-                                                    <Eye size={12} />
-                                                    View
-                                                </button>
-                                                {(task.sub_state === 'in_progress' || task.sub_state === 'pending_validation') && (
+                                                        gap: '6px'
+                                                    }}>
+                                                        <CheckCircle size={14} /> Completed
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', whiteSpace: 'nowrap' }}>
                                                     <button
-                                                        onClick={() => openProofModal(task)}
-                                                        disabled={uploading}
+                                                        onClick={() => openViewModal(task)}
                                                         style={{
                                                             padding: '6px 10px',
                                                             borderRadius: '6px',
-                                                            backgroundColor: task.sub_state === 'pending_validation' ? '#f59e0b' : '#8b5cf6',
+                                                            backgroundColor: '#eff6ff',
+                                                            color: '#1d4ed8',
+                                                            border: '1px solid #bfdbfe',
+                                                            fontWeight: 500,
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            fontSize: '0.75rem',
+                                                            transition: 'background-color 0.2s',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                                                    >
+                                                        <Eye size={12} />
+                                                        View
+                                                    </button>
+                                                    {(task.sub_state === 'in_progress' || task.sub_state === 'pending_validation') && (
+                                                        <button
+                                                            onClick={() => openProofModal(task)}
+                                                            disabled={uploading}
+                                                            style={{
+                                                                padding: '6px 10px',
+                                                                borderRadius: '6px',
+                                                                backgroundColor: task.sub_state === 'pending_validation' ? '#f59e0b' : '#8b5cf6',
+                                                                color: 'white',
+                                                                border: 'none',
+                                                                fontWeight: 500,
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px',
+                                                                fontSize: '0.75rem',
+                                                                transition: 'background-color 0.2s',
+                                                                whiteSpace: 'nowrap'
+                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = task.sub_state === 'pending_validation' ? '#d97706' : '#7c3aed'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = task.sub_state === 'pending_validation' ? '#f59e0b' : '#8b5cf6'}
+                                                        >
+                                                            <Upload size={12} />
+                                                            {task.sub_state === 'pending_validation' ? 'Update Proof' : 'Submit'}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => openIssueModal(task)}
+                                                        disabled={submittingIssue}
+                                                        style={{
+                                                            padding: '6px 10px',
+                                                            borderRadius: '6px',
+                                                            backgroundColor: task.issues ? '#dc2626' : '#ef4444',
                                                             color: 'white',
                                                             border: 'none',
                                                             fontWeight: 500,
@@ -626,38 +673,14 @@ const MyTasksPage = () => {
                                                             transition: 'background-color 0.2s',
                                                             whiteSpace: 'nowrap'
                                                         }}
-                                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = task.sub_state === 'pending_validation' ? '#d97706' : '#7c3aed'}
-                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = task.sub_state === 'pending_validation' ? '#f59e0b' : '#8b5cf6'}
+                                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
+                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = task.issues ? '#dc2626' : '#ef4444'}
                                                     >
-                                                        <Upload size={12} />
-                                                        {task.sub_state === 'pending_validation' ? 'Update Proof' : 'Submit'}
+                                                        <AlertTriangle size={12} />
+                                                        Add Issue
                                                     </button>
-                                                )}
-                                                <button
-                                                    onClick={() => openIssueModal(task)}
-                                                    disabled={submittingIssue}
-                                                    style={{
-                                                        padding: '6px 10px',
-                                                        borderRadius: '6px',
-                                                        backgroundColor: task.issues ? '#dc2626' : '#ef4444',
-                                                        color: 'white',
-                                                        border: 'none',
-                                                        fontWeight: 500,
-                                                        cursor: 'pointer',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        fontSize: '0.75rem',
-                                                        transition: 'background-color 0.2s',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = task.issues ? '#dc2626' : '#ef4444'}
-                                                >
-                                                    <AlertTriangle size={12} />
-                                                    Add Issue
-                                                </button>
-                                            </div>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 );

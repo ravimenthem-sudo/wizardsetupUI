@@ -7,7 +7,7 @@ import MyLeavesPage from './pages/MyLeavesPage';
 import NotificationsPage from '../shared/NotificationsPage';
 import MessagingHub from '../shared/MessagingHub';
 import ManagerTasks from './components/Tasks/ManagerTasks';
-import AllTasksView from '../shared/AllTasksView';
+import ManagerAllTasksPage from './pages/ManagerAllTasksPage';
 import { ToastProvider } from './context/ToastContext';
 import { UserProvider } from './context/UserContext';
 
@@ -22,7 +22,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardHome />} />
               <Route path="/analytics" element={<ModulePage title="Analytics" type="analytics" />} />
               <Route path="/employees" element={<ModulePage title="Employees" type="workforce" />} />
-              <Route path="/tasks" element={<AllTasksView userRole="manager" />} />
+              <Route path="/tasks" element={<ManagerAllTasksPage />} />
               <Route path="/leaves" element={<ModulePage title="Leave Requests" type="leaves" />} />
               <Route path="/my-leaves" element={<MyLeavesPage />} />
               <Route path="/employee-status" element={<ModulePage title="Employee Status" type="status" />} />

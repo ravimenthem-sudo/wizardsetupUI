@@ -278,7 +278,7 @@ const TaskLifecyclePage = ({ userRole = 'employee', userId, addToast, projectRol
         return matchesStatus && matchesSearch;
     });
 
-    const LifecycleProgress = ({ currentPhase, subState }) => {
+    const LifecycleProgress = ({ currentPhase, subState, taskStatus }) => {
         const currentIndex = getPhaseIndex(currentPhase);
         return (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -288,8 +288,8 @@ const TaskLifecyclePage = ({ userRole = 'employee', userId, addToast, projectRol
                             width: '28px', height: '28px', borderRadius: '50%',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: '0.65rem', fontWeight: 600,
-                            backgroundColor: idx < currentIndex ? '#10b981' : idx === currentIndex ? (subState === 'pending_validation' ? '#f59e0b' : '#3b82f6') : '#e5e7eb',
-                            color: idx <= currentIndex ? 'white' : '#9ca3af'
+                            backgroundColor: taskStatus === 'completed' ? '#10b981' : (idx < currentIndex ? '#10b981' : idx === currentIndex ? (subState === 'pending_validation' ? '#f59e0b' : '#3b82f6') : '#e5e7eb'),
+                            color: (taskStatus === 'completed' || idx <= currentIndex) ? 'white' : '#9ca3af'
                         }} title={phase.label}>
                             {idx < currentIndex ? '✓' : phase.short.charAt(0)}
                         </div>
@@ -369,7 +369,7 @@ const TaskLifecyclePage = ({ userRole = 'employee', userId, addToast, projectRol
                                                 </span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '16px' }}><LifecycleProgress currentPhase={task.lifecycle_state} subState={task.sub_state} /></td>
+                                        <td style={{ padding: '16px' }}><LifecycleProgress currentPhase={task.lifecycle_state} subState={task.sub_state} taskStatus={task.status} /></td>
                                         <td style={{ padding: '16px' }}>
                                             <span style={{ padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, backgroundColor: subStateColor.bg, color: subStateColor.text }}>
                                                 {task.sub_state?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -381,18 +381,36 @@ const TaskLifecyclePage = ({ userRole = 'employee', userId, addToast, projectRol
                                             </div>
                                         </td>
                                         <td style={{ padding: '16px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                                                {task.sub_state === 'in_progress' && (
-                                                    <button onClick={() => openProofModal(task)} disabled={actionLoading}
-                                                        style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
-                                                        <Upload size={14} /> Submit for Validation
+                                            {task.status === 'completed' ? (
+                                                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                                    <span style={{
+                                                        padding: '6px 12px',
+                                                        borderRadius: '20px',
+                                                        backgroundColor: '#dcfce7',
+                                                        color: '#166534',
+                                                        fontSize: '0.8rem',
+                                                        fontWeight: 600,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}>
+                                                        <CheckCircle size={14} /> Completed
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                                                    {task.sub_state === 'in_progress' && (
+                                                        <button onClick={() => openProofModal(task)} disabled={actionLoading}
+                                                            style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+                                                            <Upload size={14} /> Submit for Validation
+                                                        </button>
+                                                    )}
+                                                    <button onClick={() => { setSelectedTask(task); setShowTaskModal(true); fetchTaskHistory(task.id); }}
+                                                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: 'var(--background)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
+                                                        <Eye size={14} /> View
                                                     </button>
-                                                )}
-                                                <button onClick={() => { setSelectedTask(task); setShowTaskModal(true); fetchTaskHistory(task.id); }}
-                                                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: 'var(--background)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem' }}>
-                                                    <Eye size={14} /> View
-                                                </button>
-                                            </div>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 );

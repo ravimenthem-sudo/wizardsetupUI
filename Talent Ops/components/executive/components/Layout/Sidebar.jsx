@@ -22,13 +22,16 @@ import {
     FolderOpen,
     TrendingUp,
     Building2,
-    FolderKanban
+    FolderKanban,
+    Ticket
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useMessages } from '../../../shared/context/MessageContext';
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { unreadCount } = useMessages();
 
     const [expandedMenus, setExpandedMenus] = useState({
         organization: true,
@@ -57,6 +60,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
         { icon: Megaphone, label: 'Announcements', path: '/executive-dashboard/announcements' },
         { icon: MessageCircle, label: 'Messages', path: '/executive-dashboard/messages' },
         { icon: FileCheck, label: 'Policies', path: '/executive-dashboard/policies' },
+        { icon: Ticket, label: 'Raise a Ticket', path: '/executive-dashboard/raise-ticket' },
     ];
 
     // Project-level menu items (Project Manager stuff)
@@ -107,6 +111,32 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
             >
                 <item.icon size={18} style={{ flexShrink: 0 }} />
                 {!isCollapsed && <span>{item.label}</span>}
+                {item.label === 'Messages' && unreadCount > 0 && (
+                    <div style={{
+                        marginLeft: 'auto',
+                        backgroundColor: '#ef4444',
+                        color: 'white',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        padding: '2px 6px',
+                        borderRadius: '9999px',
+                        minWidth: '18px',
+                        textAlign: 'center'
+                    }}>
+                        {unreadCount}
+                    </div>
+                )}
+                {isCollapsed && item.label === 'Messages' && unreadCount > 0 && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        backgroundColor: '#ef4444',
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%'
+                    }} />
+                )}
             </button>
         );
     };

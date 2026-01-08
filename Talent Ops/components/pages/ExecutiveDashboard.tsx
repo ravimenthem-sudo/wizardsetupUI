@@ -21,6 +21,8 @@ import HiringPortal from '../executive/pages/HiringPortal/HiringPortal';
 import ProjectManagement from '../executive/pages/ProjectManagement';
 // @ts-ignore
 import ProjectDocuments from '../employee/pages/ProjectDocuments';
+// @ts-ignore
+import RaiseTicketPage from '../shared/pages/RaiseTicketPage';
 import RoleGuard from '../shared/RoleGuard';
 import '../executive/index.css';
 
@@ -55,6 +57,7 @@ export const ExecutiveDashboard = () => {
                                 <Route path="hierarchy" element={<ModulePage title="Organizational Hierarchy" type="default" />} />
                                 <Route path="project-hierarchy" element={<ModulePage title="Project Hierarchy" type="default" />} />
                                 <Route path="announcements" element={<ModulePage title="Announcements" type="default" />} />
+                                <Route path="raise-ticket" element={<RaiseTicketPage />} />
                                 <Route path="settings" element={<ModulePage title="Settings" type="default" />} />
                                 <Route path="project-analytics" element={<ModulePage title="Project Analytics" type="project-analytics" />} />
                                 <Route path="documents" element={<DocumentsWithToast />} />

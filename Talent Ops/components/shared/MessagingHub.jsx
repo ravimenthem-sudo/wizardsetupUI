@@ -705,7 +705,8 @@ const MessagingHub = () => {
                                             {conv.name || 'Conversation'}
                                         </div>
                                         <div className="conversation-preview">
-                                            {conv.conversation_indexes?.[0]?.last_message || 'No messages yet'}
+                                            {conv.conversation_indexes?.[0]?.last_message
+                                                || (conv.conversation_indexes?.[0]?.last_message_at ? '📎 Attachment' : 'No messages yet')}
                                         </div>
                                     </div>
                                     <div className="conversation-time">

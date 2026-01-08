@@ -11,6 +11,8 @@ import OrgHierarchy from '../employee/pages/OrgHierarchy';
 // @ts-ignore
 import MessagingHub from '../shared/MessagingHub';
 // @ts-ignore
+import RaiseTicketPage from '../shared/pages/RaiseTicketPage';
+// @ts-ignore
 import { ToastProvider } from '../employee/context/ToastContext';
 // @ts-ignore
 import { UserProvider } from '../employee/context/UserContext';
@@ -51,6 +53,7 @@ export const EmployeeDashboard = () => {
                                 <Route path="project-hierarchy" element={<ModulePage title="Project Hierarchy" type="default" />} />
                                 <Route path="messages" element={<MessagingHub />} />
                                 <Route path="announcements" element={<ModulePage title="Announcements" type="default" />} />
+                                <Route path="raise-ticket" element={<RaiseTicketPage />} />
                                 <Route path="settings" element={<ModulePage title="Settings" type="default" />} />
                                 { /* Role-specific routes for Team Lead and Manager */}
                                 <Route path="approve-leaves" element={<ModulePage title="Approve Leaves" type="leaves" />} />

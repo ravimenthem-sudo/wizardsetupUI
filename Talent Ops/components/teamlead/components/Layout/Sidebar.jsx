@@ -20,16 +20,19 @@ import {
     Building2,
     FolderKanban,
     ChevronsUpDown,
-    Check
+    Check,
+    Ticket
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../../../lib/supabaseClient';
+import { useMessages } from '../../../shared/context/MessageContext';
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const { teamId, setTeamId, userId } = useUser();
+    const { unreadCount } = useMessages();
     const [projectName, setProjectName] = useState('Talent Ops');
     const [userProjects, setUserProjects] = useState([]);
     const [showProjectSelect, setShowProjectSelect] = useState(false);
@@ -111,6 +114,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
         { icon: Network, label: 'Org Hierarchy', path: '/teamlead-dashboard/hierarchy' },
         { icon: Megaphone, label: 'Announcements', path: '/teamlead-dashboard/announcements' },
         { icon: MessageCircle, label: 'Messages', path: '/teamlead-dashboard/messages' },
+        { icon: Ticket, label: 'Raise a Ticket', path: '/teamlead-dashboard/raise-ticket' },
     ];
 
     // Project-level menu items
@@ -132,6 +136,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
                 onClick={() => navigate(item.path)}
                 title={isCollapsed ? item.label : ''}
                 style={{
+                    position: 'relative', // Required for absolute positioned dot
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: isCollapsed ? 'center' : 'flex-start',
@@ -161,6 +166,34 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
             >
                 <item.icon size={18} style={{ flexShrink: 0 }} />
                 {!isCollapsed && <span>{item.label}</span>}
+                {/* Expanded: Show badge with count */}
+                {!isCollapsed && item.label === 'Messages' && unreadCount > 0 && (
+                    <div style={{
+                        marginLeft: 'auto',
+                        backgroundColor: '#ef4444',
+                        color: 'white',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        padding: '2px 6px',
+                        borderRadius: '9999px',
+                        minWidth: '18px',
+                        textAlign: 'center'
+                    }}>
+                        {unreadCount}
+                    </div>
+                )}
+                {/* Collapsed: Show small red dot */}
+                {isCollapsed && item.label === 'Messages' && unreadCount > 0 && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        backgroundColor: '#ef4444',
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%'
+                    }} />
+                )}
             </button>
         );
     };

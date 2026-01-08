@@ -9,7 +9,11 @@ import ModulePage from '../manager/pages/ModulePage';
 // @ts-ignore
 import MyLeavesPage from '../manager/pages/MyLeavesPage';
 // @ts-ignore
+import ManagerAllTasksPage from '../manager/pages/ManagerAllTasksPage';
+// @ts-ignore
 import MessagingHub from '../shared/MessagingHub';
+// @ts-ignore
+import RaiseTicketPage from '../shared/pages/RaiseTicketPage';
 // @ts-ignore
 import { ToastProvider } from '../manager/context/ToastContext';
 // @ts-ignore
@@ -32,7 +36,7 @@ export const ManagerDashboard = () => {
                                 <Route path="analytics" element={<ModulePage title="Analytics" type="analytics" />} />
                                 <Route path="employees" element={<ModulePage title="Team Members" type="workforce" />} />
                                 <Route path="tasks" element={<ModulePage title="All Project Tasks" type="tasks" />} />
-                                <Route path="global-tasks" element={<ModulePage title="All Organization Tasks" type="global-tasks" />} />
+                                <Route path="global-tasks" element={<ManagerAllTasksPage />} />
                                 <Route path="personal-tasks" element={<ModulePage title="My Tasks" type="personal-tasks" />} />
                                 <Route path="leaves" element={<ModulePage title="Leave Requests" type="leaves" />} />
                                 <Route path="my-leaves" element={<MyLeavesPage />} />
@@ -45,6 +49,7 @@ export const ManagerDashboard = () => {
                                 <Route path="project-hierarchy" element={<ModulePage title="Project Hierarchy" type="default" />} />
                                 <Route path="messages" element={<MessagingHub />} />
                                 <Route path="announcements" element={<ModulePage title="Announcements" type="default" />} />
+                                <Route path="raise-ticket" element={<RaiseTicketPage />} />
                                 <Route path="documents" element={<ModulePage title="Project Documents" type="documents" />} />
                                 <Route path="settings" element={<ModulePage title="Settings" type="default" />} />
                             </Routes>

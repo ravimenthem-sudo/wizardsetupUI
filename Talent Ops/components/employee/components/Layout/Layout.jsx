@@ -6,6 +6,7 @@ import Chatbot from '../UI/Chatbot';
 import LoginSummaryModal from '../../../shared/LoginSummaryModal';
 import AnnouncementPopup from '../../../shared/AnnouncementPopup';
 import { supabase } from '../../../../lib/supabaseClient';
+import { useToast } from '../../context/ToastContext';
 import { MessageProvider } from '../../../shared/context/MessageContext';
 
 const Layout = ({ children }) => {
@@ -14,6 +15,7 @@ const Layout = ({ children }) => {
     const [showAnnouncements, setShowAnnouncements] = React.useState(false);
     const [userId, setUserId] = React.useState(null);
     const location = useLocation();
+    const { addToast } = useToast();
 
     React.useEffect(() => {
         const fetchUser = async () => {
@@ -27,16 +29,42 @@ const Layout = ({ children }) => {
         fetchUser();
     }, []);
 
+    // REAL-TIME NOTIFICATION LISTENER
+    React.useEffect(() => {
+        if (!userId) return;
+
+        const channel = supabase
+            .channel(`notifications-${userId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'notifications',
+                    filter: `receiver_id=eq.${userId}`
+                },
+                (payload) => {
+                    console.log('Real-time notification received:', payload);
+                    // setShowLoginSummary(true); // Disable modal for real-time notifications
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [userId]);
+
     const handleAnnouncementsClose = () => {
         setShowAnnouncements(false);
-        // Step 2: Show Notifications after announcements are closed
-        setShowLoginSummary(true);
+        // Step 2: Show Notifications after announcements are closed - DISABLED for inline toast notifications
+        // setShowLoginSummary(true);
     };
 
     // Removed auto-collapse timer
 
     return (
-        <MessageProvider>
+        <MessageProvider addToast={addToast}>
             <div style={{ display: 'flex', minHeight: '100vh' }}>
                 <Sidebar
                     isCollapsed={isCollapsed}

@@ -180,7 +180,9 @@ export const sendMessage = async (conversationId, userId, content, files = []) =
         }
 
         // Update conversation index
-        await updateConversationIndex(conversationId, content);
+        // Use '[Attachment]' if no text but files were sent
+        const indexMessage = content || (files && files.length > 0 ? '📎 Attachment' : '');
+        await updateConversationIndex(conversationId, indexMessage);
 
         return message;
     } catch (error) {

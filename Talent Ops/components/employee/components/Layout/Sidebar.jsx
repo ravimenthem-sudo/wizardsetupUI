@@ -20,7 +20,8 @@ import {
     FolderKanban,
     Check,
     ClipboardCheck,
-    TrendingUp
+    TrendingUp,
+    Ticket
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useProject } from '../../context/ProjectContext';
@@ -56,6 +57,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
         { icon: Megaphone, label: 'Announcements', path: '/employee-dashboard/announcements' },
         { icon: MessageCircle, label: 'Messages', path: '/employee-dashboard/messages' },
         { icon: Network, label: 'Org Hierarchy', path: '/employee-dashboard/org-hierarchy' },
+        { icon: Ticket, label: 'Raise a Ticket', path: '/employee-dashboard/raise-ticket' },
     ];
 
     // Role-based project menu configurations
@@ -109,12 +111,19 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
     // Menu item renderer
     const renderMenuItem = (item, index, keyPrefix) => {
         const isActive = location.pathname === item.path;
+
+        // Debug: Log unreadCount for Messages
+        if (item.label === 'Messages') {
+            console.log('🔴 Sidebar Messages - unreadCount:', unreadCount);
+        }
+
         return (
             <button
                 key={`${keyPrefix}-${index}`}
                 onClick={() => navigate(item.path)}
                 title={isCollapsed ? item.label : ''}
                 style={{
+                    position: 'relative', // Required for absolute positioned dot
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: isCollapsed ? 'center' : 'flex-start',
@@ -144,7 +153,8 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
             >
                 <item.icon size={18} style={{ flexShrink: 0 }} />
                 {!isCollapsed && <span>{item.label}</span>}
-                {item.label === 'Messages' && unreadCount > 0 && (
+                {/* Expanded: Show badge with count */}
+                {!isCollapsed && item.label === 'Messages' && unreadCount > 0 && (
                     <div style={{
                         marginLeft: 'auto',
                         backgroundColor: '#ef4444',
@@ -159,6 +169,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
                         {unreadCount}
                     </div>
                 )}
+                {/* Collapsed: Show small red dot */}
                 {isCollapsed && item.label === 'Messages' && unreadCount > 0 && (
                     <div style={{
                         position: 'absolute',
