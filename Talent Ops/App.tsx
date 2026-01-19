@@ -8,6 +8,7 @@ import { TeamLeadDashboard } from './components/pages/TeamLeadDashboard';
 import { EmployeeDashboard } from './components/pages/EmployeeDashboard';
 import { ForgotPasswordPage } from './components/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './components/pages/ResetPasswordPage';
+import { SetupWizard } from './components/pages/SetupWizard';
 
 import { useEffect } from 'react';
 import { supabase } from './lib/supabaseClient';
@@ -61,6 +62,7 @@ function App() {
                 <Route path="/employee-dashboard/*" element={<EmployeeDashboard />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/setup" element={<SetupWizard />} />
             </Routes>
         </Router>
     );

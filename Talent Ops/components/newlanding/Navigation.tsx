@@ -74,15 +74,15 @@ export default function Navigation() {
                 >
                     Login
                 </button>
-                <a
-                    href="#cta"
+                <button
+                    onClick={() => navigate('/setup')}
                     className={`font-accent text-xs font-semibold tracking-[0.15em] uppercase px-8 py-4 rounded-sm transition-all duration-300 hover:-translate-y-0.5 ${isDark
                         ? 'text-ink bg-paper hover:bg-neutral-200'
                         : 'text-paper bg-ink hover:bg-accent-violet'
                         }`}
                 >
                     Begin
-                </a>
+                </button>
             </div>
         </nav>
     )
