@@ -15,6 +15,7 @@ export const UserProvider = ({ children }) => {
     const [userId, setUserId] = useState(null);
     const [teamId, setTeamId] = useState(null);
     const [orgId, setOrgId] = useState(null);
+    const [orgConfig, setOrgConfig] = useState(null);
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -43,6 +44,19 @@ export const UserProvider = ({ children }) => {
                         setUserRole(profile.role || 'User');
                         setTeamId(profile.team_id);
                         setOrgId(profile.org_id);
+
+                        // Fetch Organization extra details
+                        if (profile.org_id) {
+                            const { data: orgData } = await supabase
+                                .from('orgs')
+                                .select('modules, features, permissions')
+                                .eq('id', profile.org_id)
+                                .single();
+
+                            if (orgData) {
+                                setOrgConfig(orgData);
+                            }
+                        }
                     }
 
 
@@ -126,7 +140,8 @@ export const UserProvider = ({ children }) => {
             lastActive, setLastActive,
             userId,      // Expose userId
             teamId,      // Expose teamId or userTeamId (to avoid conflict with currentTeam which seems to be a filter)
-            orgId        // Expose orgId
+            orgId,       // Expose orgId
+            orgConfig    // Expose orgConfig
         }}>
             {children}
         </UserContext.Provider>

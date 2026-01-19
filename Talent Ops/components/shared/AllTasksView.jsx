@@ -895,7 +895,8 @@ const AllTasksView = ({ userRole = 'employee', projectRole = 'employee', userId,
             const { error } = await supabase
                 .from('tasks')
                 .update(updates)
-                .eq('id', taskForProof.id);
+                .eq('id', taskForProof.id)
+                .eq('org_id', orgId);
 
             if (error) throw error;
 

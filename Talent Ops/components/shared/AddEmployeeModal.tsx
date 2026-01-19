@@ -56,6 +56,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
     }, [isOpen, orgId]);
 
     const fetchDepartments = async () => {
+        if (!orgId) return;
         console.log('Fetching departments...');
         const { data, error } = await supabase
             .from('departments')
@@ -65,13 +66,34 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
 
         if (error) {
             console.error('Error fetching departments:', error);
-        } else {
+        } else if (data && data.length > 0) {
             console.log('Departments fetched:', data);
-            setDepartments(data || []);
+            setDepartments(data);
+        } else {
+            // Auto-seed default departments if none exist
+            console.log('No departments found, seeding defaults...');
+            const defaults = [
+                { department_name: 'General', org_id: orgId },
+                { department_name: 'Engineering', org_id: orgId },
+                { department_name: 'HR', org_id: orgId },
+            ];
+
+            const { data: seeded, error: seedError } = await supabase
+                .from('departments')
+                .insert(defaults)
+                .select();
+
+            if (seedError) {
+                console.error('Error seeding departments:', seedError);
+            } else {
+                console.log('Departments seeded successfully:', seeded);
+                setDepartments(seeded || []);
+            }
         }
     };
 
     const fetchProjects = async () => {
+        if (!orgId) return;
         console.log('Fetching projects...');
         const { data, error } = await supabase
             .from('projects')
@@ -93,6 +115,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
         setLoading(true);
 
         try {
+            // Validate orgId is present
+            if (!orgId) {
+                throw new Error('Organization ID is missing. Please refresh the page and try again.');
+            }
+
             // Get the current session token
             const { data: { session } } = await supabase.auth.getSession();
 
@@ -104,9 +131,15 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
             console.log('Sending data to Edge Function:', {
                 full_name: formData.full_name,
                 email: formData.email,
+                password: '***',
                 role: formData.role,
-                project_id: selectedProjects[0] || null,
                 monthly_leave_quota: formData.monthly_leave_quota,
+                basic_salary: parseFloat(formData.basic_salary),
+                hra: parseFloat(formData.hra),
+                allowances: parseFloat(formData.allowances) || 0,
+                join_date: formData.joinDate,
+                employment_type: formData.employment_type,
+                org_id: orgId
             });
 
             const response = await fetch(
@@ -128,7 +161,10 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                         allowances: parseFloat(formData.allowances) || 0,
                         join_date: formData.joinDate,
                         employment_type: formData.employment_type,
-                        org_id: orgId
+                        org_id: orgId,
+                        // Add metadata fields for robustness
+                        data: { org_id: orgId },
+                        user_metadata: { org_id: orgId }
                     }),
                 }
             );
@@ -149,13 +185,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
 
             // If a project was selected, add the user to project_members
             if (response.ok) {
-                console.log('Adding user to project_members...');
-
-                // Get the user_id - either from the response or by querying
-                let userId = result.user_id;
+                // Get the user_id - check multiple common paths
+                let userId = result.user_id || result.id || result.user?.id || result.data?.user?.id;
 
                 if (!userId) {
-                    // Query for the newly created user by email
+                    // Query for the newly created user by email as fallback
                     const { data: profileData, error: profileError } = await supabase
                         .from('profiles')
                         .select('id')
@@ -171,29 +205,27 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onCl
                 }
 
                 if (userId) {
-                    // Update profile with department, job_title and join date
-                    if (formData.department_id || formData.joinDate || formData.job_title) {
-                        const updateData: any = {};
-                        if (formData.department_id) updateData.department = formData.department_id;
-                        if (formData.joinDate) updateData.join_date = formData.joinDate;
-                        if (formData.job_title) updateData.job_title = formData.job_title;
-                        if (formData.employment_type) updateData.employment_type = formData.employment_type;
+                    // Always try to update with org_id and other details
+                    const updateData: any = { org_id: orgId }; // Force update org_id
+                    if (formData.department_id) updateData.department = formData.department_id;
+                    if (formData.joinDate) updateData.join_date = formData.joinDate;
+                    if (formData.job_title) updateData.job_title = formData.job_title;
+                    if (formData.employment_type) updateData.employment_type = formData.employment_type;
 
-                        console.log('Updating profile for user:', userId, 'with data:', updateData);
-                        const { data: updateResult, error: updateError } = await supabase
-                            .from('profiles')
-                            .update(updateData)
-                            .eq('id', userId)
-                            .eq('org_id', orgId)
-                            .select();
+                    console.log('Updating profile for user:', userId, 'with data:', updateData);
+                    const { data: updateResult, error: updateError } = await supabase
+                        .from('profiles')
+                        .update(updateData)
+                        .eq('id', userId)
+                        .select();
 
-                        if (updateError) {
-                            console.error('FAILED to update profile:', updateError);
-                            setError(`Failed to update profile details: ${updateError.message}`);
-                        } else {
-                            console.log('Profile updated successfully:', updateResult);
-                        }
+                    if (updateError) {
+                        console.error('FAILED to update profile:', updateError);
+                        setError(`Failed to update profile details: ${updateError.message}`);
+                    } else {
+                        console.log('Profile updated successfully:', updateResult);
                     }
+
 
                     // Add to all selected projects
                     const projectAssignments = selectedProjects.map(projectId => ({

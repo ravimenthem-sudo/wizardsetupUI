@@ -31,7 +31,9 @@ import { useMessages } from '../../../shared/context/MessageContext';
 const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { teamId, setTeamId, userId } = useUser();
+    const { teamId, setTeamId, userId, orgConfig } = useUser();
+    const enabledModules = orgConfig?.modules || [];
+    const enabledFeatures = orgConfig?.features || []; // Added enabledFeatures
     const { unreadCount } = useMessages();
     const [projectName, setProjectName] = useState('Talent Ops');
     const [userProjects, setUserProjects] = useState([]);
@@ -107,25 +109,35 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
     // Organization-level menu items
     const orgMenuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/teamlead-dashboard/dashboard' },
-        { icon: UserCheck, label: 'Team Status', path: '/teamlead-dashboard/team-status' },
-        { icon: CalendarOff, label: 'Leave Requests', path: '/teamlead-dashboard/leaves' },
-        { icon: Receipt, label: 'Payslips', path: '/teamlead-dashboard/payslips' },
-        { icon: FileText, label: 'Policies', path: '/teamlead-dashboard/policies' },
-        { icon: Network, label: 'Org Hierarchy', path: '/teamlead-dashboard/hierarchy' },
-        { icon: Megaphone, label: 'Announcements', path: '/teamlead-dashboard/announcements' },
-        { icon: MessageCircle, label: 'Messages', path: '/teamlead-dashboard/messages' },
-        { icon: Ticket, label: 'Raise a Ticket', path: '/teamlead-dashboard/raise-ticket' },
+        { icon: UserCheck, label: 'Team Status', path: '/teamlead-dashboard/team-status', module: 'attendance' },
+        { icon: CalendarOff, label: 'Leave Requests', path: '/teamlead-dashboard/leaves', module: 'hr', feature: 'leaves' },
+        { icon: Receipt, label: 'Payslips', path: '/teamlead-dashboard/payslips', module: 'payroll', feature: 'payslip' },
+        { icon: FileText, label: 'Policies', path: '/teamlead-dashboard/policies', module: 'hr' },
+        { icon: Network, label: 'Org Hierarchy', path: '/teamlead-dashboard/hierarchy', module: 'hr', feature: 'org_chart' },
+        { icon: Megaphone, label: 'Announcements', path: '/teamlead-dashboard/announcements', module: 'hr' },
+        { icon: MessageCircle, label: 'Messages', path: '/teamlead-dashboard/messages', module: 'messaging' },
+        { icon: Ticket, label: 'Raise a Ticket', path: '/teamlead-dashboard/raise-ticket', module: 'helpdesk' },
     ];
+
+    const filteredOrgItems = orgMenuItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Project-level menu items
     const projectMenuItems = [
         { icon: Users, label: 'Team Members', path: '/teamlead-dashboard/employees' },
-        { icon: ListTodo, label: 'Tasks', path: '/teamlead-dashboard/tasks' },
-        { icon: ClipboardList, label: 'Team Tasks', path: '/teamlead-dashboard/team-tasks' },
-        { icon: BarChart2, label: 'Analytics', path: '/teamlead-dashboard/analytics' },
-        { icon: Network, label: 'Project Hierarchy', path: '/teamlead-dashboard/project-hierarchy' },
-        { icon: FileText, label: 'Documents', path: '/teamlead-dashboard/documents' },
+        { icon: ListTodo, label: 'Tasks', path: '/teamlead-dashboard/tasks', module: 'tasks' },
+        { icon: ClipboardList, label: 'Team Tasks', path: '/teamlead-dashboard/team-tasks', module: 'tasks' },
+        { icon: BarChart2, label: 'Analytics', path: '/teamlead-dashboard/analytics', module: 'performance' },
+        { icon: Network, label: 'Project Hierarchy', path: '/teamlead-dashboard/project-hierarchy', module: 'tasks' },
+        { icon: FileText, label: 'Documents', path: '/teamlead-dashboard/documents', module: 'tasks' },
     ];
+
+    const filteredProjItems = projectMenuItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Menu item renderer
     const renderMenuItem = (item, index, keyPrefix) => {
@@ -308,12 +320,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
                 {renderSectionHeader(Building2, 'Organization', 'organization')}
                 {expandedMenus.organization && !isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
                 {isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
 
@@ -401,12 +413,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
 
                 {expandedMenus.project && !isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {projectMenuItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
+                        {filteredProjItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
                     </div>
                 )}
                 {isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {projectMenuItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
+                        {filteredProjItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
                     </div>
                 )}
             </nav>

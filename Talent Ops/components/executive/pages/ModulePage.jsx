@@ -2441,9 +2441,7 @@ const ModulePage = ({ title, type }) => {
                     addToast('Employee added successfully', 'success');
                     setShowAddEmployeeModal(false);
                     // Refresh employees list
-                    if (type === 'workforce' || type === 'status') {
-                        window.location.reload();
-                    }
+                    setRefreshTrigger(prev => prev + 1);
                 }}
             />
 
@@ -2652,77 +2650,7 @@ const ModulePage = ({ title, type }) => {
                 onSuccess={async () => {
                     addToast('Employee updated successfully', 'success');
                     // Refresh employees list
-                    if (type === 'workforce' || type === 'status') {
-                        try {
-                            const { data, error } = await supabase
-                                .from('profiles')
-                                .select(`
-                                    id, 
-                                    full_name, 
-                                    email, 
-                                    role, 
-                                    job_title,
-                                    employment_type,
-                                    team_id, 
-                                    department,
-                                    created_at,
-                                    teams!team_id (
-                                        team_name
-                                    )
-                                `);
-
-                            if (error) {
-                                console.error('Error refreshing employees:', error);
-                                return;
-                            }
-
-                            // Also fetch project assignments
-                            const { data: teamMembersData } = await supabase
-                                .from('project_members')
-                                .select(`
-                                    user_id,
-                                    project_id,
-                                    projects:project_id (
-                                        name
-                                    )
-                                `);
-
-                            const projectMap = {};
-                            if (teamMembersData) {
-                                teamMembersData.forEach(member => {
-                                    if (!projectMap[member.user_id]) projectMap[member.user_id] = []; if (member.projects?.name) projectMap[member.user_id].push(member.projects.name);
-                                });
-                            }
-
-                            if (data) {
-                                const transformedEmployees = data.map(emp => {
-                                    // Match department name from ID
-                                    const matchedDept = departments.find(d => d.id === emp.department);
-                                    const departmentNameDisplay = matchedDept ? matchedDept.department_name : (emp.department || 'N/A');
-
-                                    return {
-                                        id: emp.id,
-                                        name: emp.full_name || 'N/A',
-                                        email: emp.email || 'N/A',
-                                        role: emp.role || 'N/A',
-                                        job_title: emp.job_title,
-                                        employment_type: emp.employment_type || 'Full-Time',
-                                        team_id: emp.team_id,
-                                        dept: (Array.isArray(projectMap[emp.id]) && projectMap[emp.id].length > 0) ? (<>{projectMap[emp.id].map((pn, i) => <div key={i}>{pn}</div>)}</>) : (emp.teams?.team_name || 'Unassigned'),
-                                        department_display: departmentNameDisplay,
-                                        status: 'Active',
-                                        joinDate: emp.created_at ? new Date(emp.created_at).toLocaleDateString() : 'N/A',
-                                        performance: 'N/A',
-                                        projects: 0,
-                                        tasksCompleted: 0
-                                    };
-                                });
-                                setEmployees(transformedEmployees);
-                            }
-                        } catch (err) {
-                            console.error('Error refreshing after edit:', err);
-                        }
-                    }
+                    setRefreshTrigger(prev => prev + 1);
                 }}
             />
             {/* Leave Details Modal */}

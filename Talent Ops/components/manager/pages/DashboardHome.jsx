@@ -14,7 +14,7 @@ import { useProject } from '../../employee/context/ProjectContext';
 
 const DashboardHome = () => {
     const { addToast } = useToast();
-    const { userName } = useUser();
+    const { userName, orgId, orgConfig } = useUser();
     const { currentProject } = useProject();
     const navigate = useNavigate();
 
@@ -98,35 +98,59 @@ const DashboardHome = () => {
                     }
 
                     // Fetch Project Tasks
-                    const { data: taskData } = await supabase
+                    let projectTasksQuery = supabase
                         .from('tasks')
                         .select('id, status, assigned_to, title, due_date, priority, project_id')
                         .eq('project_id', currentProject.id);
+
+                    if (orgId) {
+                        projectTasksQuery = projectTasksQuery.eq('org_id', orgId);
+                    }
+                    const { data: taskData } = await projectTasksQuery;
                     tasks = taskData || [];
 
-                    // Fetch Announcements (Keeping global for now, filtering can be added if needed)
-                    // Ideally check if announcement is for 'all' or specific team/project
-                    const { data: annData } = await supabase
+                    // Fetch Announcements
+                    let annQuery = supabase
                         .from('announcements')
-                        .select('*')
+                        .select('*');
+
+                    if (orgId) {
+                        annQuery = annQuery.eq('org_id', orgId);
+                    }
+                    const { data: annData } = await annQuery
                         .order('event_time', { ascending: true });
                     eventsData = annData || [];
 
                 } else {
                     // Global View assignment
-                    const { data: empData } = await supabase
+                    let profileQuery = supabase
                         .from('profiles')
                         .select('id, full_name, role, team_id');
+
+                    if (orgId) {
+                        profileQuery = profileQuery.eq('org_id', orgId);
+                    }
+                    const { data: empData } = await profileQuery;
                     employees = empData || [];
 
-                    const { data: taskData } = await supabase
+                    let tasksQuery = supabase
                         .from('tasks')
                         .select('id, status, assigned_to, title, due_date, priority, project_id');
+
+                    if (orgId) {
+                        tasksQuery = tasksQuery.eq('org_id', orgId);
+                    }
+                    const { data: taskData } = await tasksQuery;
                     tasks = taskData || [];
 
-                    const { data: annData } = await supabase
+                    let annQuery = supabase
                         .from('announcements')
-                        .select('*')
+                        .select('*');
+
+                    if (orgId) {
+                        annQuery = annQuery.eq('org_id', orgId);
+                    }
+                    const { data: annData } = await annQuery
                         .order('event_time', { ascending: true });
                     eventsData = annData || [];
                 }
@@ -169,25 +193,40 @@ const DashboardHome = () => {
                 // --- GLOBAL STATS CALCULATION (Organization-wide data for Employees Card) ---
 
                 // 1. Fetch Global Total Employees
-                const { count: globalTotalCount } = await supabase
+                let globalProfileQuery = supabase
                     .from('profiles')
                     .select('*', { count: 'exact', head: true });
 
+                if (orgId) {
+                    globalProfileQuery = globalProfileQuery.eq('org_id', orgId);
+                }
+                const { count: globalTotalCount } = await globalProfileQuery;
+
                 // 2. Fetch Global Active (Clocked In)
-                const { data: globalActiveAttendance } = await supabase
+                let globalAttendanceQuery = supabase
                     .from('attendance')
                     .select('employee_id')
                     .eq('date', todayStr)
                     .not('clock_in', 'is', null)
                     .is('clock_out', null);
 
+                if (orgId) {
+                    globalAttendanceQuery = globalAttendanceQuery.eq('org_id', orgId);
+                }
+                const { data: globalActiveAttendance } = await globalAttendanceQuery;
+
                 // 3. Fetch Global Absent (On Leave)
-                const { count: globalAbsentCount } = await supabase
+                let globalLeavesQuery = supabase
                     .from('leaves')
                     .select('*', { count: 'exact', head: true })
                     .eq('status', 'approved')
                     .lte('from_date', todayStr)
                     .gte('to_date', todayStr);
+
+                if (orgId) {
+                    globalLeavesQuery = globalLeavesQuery.eq('org_id', orgId);
+                }
+                const { count: globalAbsentCount } = await globalLeavesQuery;
 
                 let globalActiveList = [];
                 const globalActiveIds = globalActiveAttendance?.map(a => a.employee_id) || [];
@@ -280,9 +319,14 @@ const DashboardHome = () => {
 
                 // Fetch Project List & Analytics
                 // Fetch Project List & Analytics
-                const { data: projectsData } = await supabase
+                let projectsFetchQuery = supabase
                     .from('projects')
                     .select('id, name');
+
+                if (orgId) {
+                    projectsFetchQuery = projectsFetchQuery.eq('org_id', orgId);
+                }
+                const { data: projectsData } = await projectsFetchQuery;
 
                 let projects = projectsData ? projectsData.map(p => ({ id: p.id, name: p.name })) : [];
 
@@ -295,9 +339,14 @@ const DashboardHome = () => {
                 if (projects.length > 0) setAllTeams(projects);
 
                 // Fetch Global Tasks for Status Calculation (for ALL projects)
-                const { data: globalTasks } = await supabase
+                let globalTasksFetchQuery = supabase
                     .from('tasks')
                     .select('id, status, project_id');
+
+                if (orgId) {
+                    globalTasksFetchQuery = globalTasksFetchQuery.eq('org_id', orgId);
+                }
+                const { data: globalTasks } = await globalTasksFetchQuery;
                 const allTasks = globalTasks || [];
 
                 if (projects) {
@@ -742,7 +791,7 @@ const DashboardHome = () => {
                         </div>
                     </div>
 
-                    <NotesTile />
+                    {orgConfig?.features?.showNotes && <NotesTile />}
                 </div>
 
                 {/* Right Side: Calendar & Timeline */}

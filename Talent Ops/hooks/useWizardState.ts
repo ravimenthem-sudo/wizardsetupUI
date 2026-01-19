@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 
 export type CompanyInfo = {
-    companyName: string;
-    companySize: string;
-    organizationId: string;
-    adminEmail: string;
+    id?: string; // Optional Org ID for verification
+    name: string;
+    industry: string;
+    website: string;
 };
 
 export type PermissionsMatrix = {
@@ -12,12 +12,7 @@ export type PermissionsMatrix = {
 };
 
 export type WizardConfig = {
-    companyInfo: {
-        name: string;
-        industry: string;
-        size: string;
-        website: string;
-    };
+    companyInfo: CompanyInfo;
     modules: string[];
     features: string[];
     permissions: PermissionsMatrix;
@@ -27,7 +22,6 @@ const DEFAULT_CONFIG: WizardConfig = {
     companyInfo: {
         name: '',
         industry: '',
-        size: '',
         website: '',
     },
     modules: [],
@@ -35,7 +29,6 @@ const DEFAULT_CONFIG: WizardConfig = {
     permissions: {
         admin: ['VIEW', 'CREATE', 'APPROVE', 'MANAGE'],
         manager: ['VIEW', 'CREATE', 'APPROVE'],
-        employee: ['VIEW'],
     },
 };
 

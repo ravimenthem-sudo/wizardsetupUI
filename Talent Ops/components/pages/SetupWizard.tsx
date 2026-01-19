@@ -8,6 +8,8 @@ import PermissionsScreen from '../wizard/screens/PermissionsScreen';
 import ReviewScreen from '../wizard/screens/ReviewScreen';
 import CompletionScreen from '../wizard/screens/CompletionScreen';
 import { useWizardState } from '../../hooks/useWizardState';
+import { saveWizardConfig } from '../../services/wizardService';
+import { useState } from 'react';
 
 export const SetupWizard: React.FC = () => {
     const {
@@ -21,6 +23,32 @@ export const SetupWizard: React.FC = () => {
         prevStep,
         goToStep
     } = useWizardState();
+
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+
+    const handleNext = async () => {
+        if (step === 6) {
+            // We are on ReviewScreen, trying to go to CompletionScreen
+            setIsSaving(true);
+            setSaveError(null);
+
+            try {
+                const result = await saveWizardConfig(config);
+                if (result.success) {
+                    nextStep();
+                } else {
+                    setSaveError(result.error || 'Failed to save configuration.');
+                }
+            } catch (err) {
+                setSaveError('An unexpected error occurred.');
+            } finally {
+                setIsSaving(false);
+            }
+        } else {
+            nextStep();
+        }
+    };
 
     const renderScreen = () => {
         switch (step) {
@@ -41,7 +69,21 @@ export const SetupWizard: React.FC = () => {
             case 5:
                 return <PermissionsScreen matrix={config.permissions} onToggle={togglePermission} />;
             case 6:
-                return <ReviewScreen config={config} onEdit={goToStep} />;
+                return (
+                    <div className="relative">
+                        {saveError && (
+                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 mx-auto max-w-2xl text-center" role="alert">
+                                <span className="block sm:inline">{saveError}</span>
+                            </div>
+                        )}
+                        <ReviewScreen config={config} onEdit={goToStep} />
+                        {isSaving && (
+                            <div className="fixed inset-0 bg-white/50 flex items-center justify-center z-50">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-violet"></div>
+                            </div>
+                        )}
+                    </div>
+                );
             case 7:
                 return <CompletionScreen />;
             default:
@@ -58,7 +100,7 @@ export const SetupWizard: React.FC = () => {
     return (
         <WizardLayout
             currentStep={step}
-            onNext={nextStep}
+            onNext={handleNext}
             onBack={prevStep}
             canNext={isStepValid()}
             isFirstStep={step === 1}

@@ -7,19 +7,21 @@ import {
     Briefcase,
     PieChart,
     TrendingUp,
-    LifeBuoy
+    LifeBuoy,
+    MessageCircle
 } from 'lucide-react';
 import SelectionCard from '@/components/wizard/ui/SelectionCard';
 
 const MODULES = [
     { id: 'hr', title: 'HR Management', description: 'Enables: Employees, Policies, Org Hierarchy, Announcements.', icon: Users },
-    { id: 'payroll', title: 'Payroll', description: 'Enables: Payroll Dashboard and Payslip Management.', icon: CreditCard },
     { id: 'attendance', title: 'Attendance', description: 'Enables: Employee Status, Shift Tracking, and Presence.', icon: CalendarCheck },
+    { id: 'payroll', title: 'Payroll', description: 'Enables: Payroll Dashboard and Payslip Management.', icon: CreditCard },
     { id: 'tasks', title: 'Task Management', description: 'Enables: Projects, My Tasks, Team Tasks, and Hierarchies.', icon: Package },
     { id: 'hiring', title: 'Hiring / Recruitment', description: 'Enables: Hiring Portal for managing applicants.', icon: Briefcase },
     { id: 'finance', title: 'Finance', description: 'Enables: Invoices and Financial Reporting.', icon: PieChart },
     { id: 'performance', title: 'Performance Management', description: 'Enables: Analytics and Performance Reviews.', icon: TrendingUp },
-    { id: 'helpdesk', title: 'Helpdesk & Support', description: 'Enables: \"Raise a Ticket\" functionality.', icon: LifeBuoy },
+    { id: 'helpdesk', title: 'Helpdesk & Support', description: 'Enables: "Raise a Ticket" functionality.', icon: LifeBuoy },
+    { id: 'messaging', title: 'Internal Messaging', description: 'Enables: Real-time messaging and communication.', icon: MessageCircle },
 ];
 
 interface Props {

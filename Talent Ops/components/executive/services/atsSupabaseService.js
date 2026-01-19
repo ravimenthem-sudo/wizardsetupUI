@@ -64,18 +64,27 @@ const toSnake = (o, table) => {
     return newO;
 };
 
-export const getItems = async (table) => {
-    const { data, error } = await supabase.from(table).select('*').order('created_at', { ascending: false });
+export const getItems = async (table, orgId) => {
+    let query = supabase.from(table).select('*').order('created_at', { ascending: false });
+
+    if (orgId) {
+        query = query.eq('org_id', orgId);
+    }
+
+    const { data, error } = await query;
     if (error) {
-        // console.error(`Error fetching ${table}:`, error); // Suppress error for now as tables might not exist yet
         return [];
     }
     return data.map(item => toCamel(item, table));
 };
 
-export const addItem = async (table, item, userId) => {
+export const addItem = async (table, item, userId, orgId) => {
     const snakeItem = toSnake(item, table);
     delete snakeItem.id;
+
+    if (orgId) {
+        snakeItem.org_id = orgId;
+    }
 
     const { data, error } = await supabase.from(table).insert([snakeItem]).select().single();
     if (error) throw error;
@@ -85,15 +94,22 @@ export const addItem = async (table, item, userId) => {
         entity: table,
         entityId: data.id,
         userId,
+        orgId,
         details: `Created ${table}: ${item.title || item.name || 'item'}`
     });
 
     return toCamel(data, table);
 };
 
-export const updateItem = async (table, id, updates, userId) => {
+export const updateItem = async (table, id, updates, userId, orgId) => {
     const snakeUpdates = toSnake(updates, table);
-    const { data, error } = await supabase.from(table).update(snakeUpdates).eq('id', id).select().single();
+    let query = supabase.from(table).update(snakeUpdates).eq('id', id);
+
+    if (orgId) {
+        query = query.eq('org_id', orgId);
+    }
+
+    const { data, error } = await query.select().single();
     if (error) throw error;
 
     await addAuditEntry({
@@ -101,6 +117,7 @@ export const updateItem = async (table, id, updates, userId) => {
         entity: table,
         entityId: id,
         userId,
+        orgId,
         details: `Updated ${table}`,
         changes: updates
     });
@@ -108,8 +125,14 @@ export const updateItem = async (table, id, updates, userId) => {
     return toCamel(data, table);
 };
 
-export const deleteItem = async (table, id, userId) => {
-    const { error } = await supabase.from(table).delete().eq('id', id);
+export const deleteItem = async (table, id, userId, orgId) => {
+    let query = supabase.from(table).delete().eq('id', id);
+
+    if (orgId) {
+        query = query.eq('org_id', orgId);
+    }
+
+    const { error } = await query;
     if (error) throw error;
 
     await addAuditEntry({
@@ -117,6 +140,7 @@ export const deleteItem = async (table, id, userId) => {
         entity: table,
         entityId: id,
         userId,
+        orgId,
         details: `Deleted ${table} item ${id}`
     });
     return true;
@@ -132,20 +156,21 @@ export const addAuditEntry = async (entry) => {
     }
 };
 
-export const getAuditLog = async (filters = {}) => {
+export const getAuditLog = async (filters = {}, orgId) => {
     let query = supabase.from('audit_log').select('*').order('timestamp', { ascending: false });
 
     if (filters.entity) query = query.eq('entity_type', filters.entity);
     if (filters.entityId) query = query.eq('entity_id', filters.entityId);
     if (filters.userId) query = query.eq('user_id', filters.userId);
     if (filters.action) query = query.eq('action', filters.action);
+    if (orgId) query = query.eq('org_id', orgId);
 
     const { data, error } = await query;
     if (error) return [];
     return data.map(item => toCamel(item, 'audit_log'));
 };
 
-export const uploadResume = async (file, candidateId) => {
+export const uploadResume = async (file, candidateId, orgId) => {
     const timestamp = Date.now();
     const filePath = `candidates/${candidateId}/${timestamp}_${file.name.replace(/\s+/g, '_')}`;
 
@@ -169,10 +194,13 @@ export const uploadResume = async (file, candidateId) => {
         resume_url: publicUrl,
     };
 
-    const { data: updatedCandidate, error: updateError } = await supabase
-        .from('candidates')
-        .update(toSnake(updates))
-        .eq('id', candidateId)
+    let query = supabase.from('candidates').update(toSnake(updates)).eq('id', candidateId);
+
+    if (orgId) {
+        query = query.eq('org_id', orgId);
+    }
+
+    const { data: updatedCandidate, error: updateError } = await query
         .select()
         .single();
 
@@ -186,15 +214,20 @@ export const uploadResume = async (file, candidateId) => {
         entity: 'candidates',
         entityId: candidateId,
         userId: (await supabase.auth.getUser()).data.user?.id,
+        orgId,
         details: `Uploaded resume for candidate`
     });
 
     return toCamel(updatedCandidate);
 };
 
-export const checkConnection = async () => {
+export const checkConnection = async (orgId) => {
     try {
-        const { error } = await supabase.from('jobs').select('count', { count: 'exact', head: true });
+        let query = supabase.from('jobs').select('count', { count: 'exact', head: true });
+        if (orgId) {
+            query = query.eq('org_id', orgId);
+        }
+        const { error } = await query;
         return !error;
     } catch (e) {
         return false;

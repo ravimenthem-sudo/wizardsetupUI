@@ -12,7 +12,7 @@ import NotesTile from '../../shared/NotesTile';
 
 const DashboardHome = () => {
     const { addToast } = useToast();
-    const { userName } = useUser();
+    const { userName, orgId, orgConfig } = useUser();
     const navigate = useNavigate();
 
     // Helper to format date as YYYY-MM-DD for comparison (Local Time)
@@ -67,24 +67,39 @@ const DashboardHome = () => {
         const fetchDashboardData = async () => {
             try {
                 // Fetch employees for stats
-                const { data: employees } = await supabase
+                let profileQuery = supabase
                     .from('profiles')
                     .select('id, full_name, role, team_id');
 
+                if (orgId) {
+                    profileQuery = profileQuery.eq('org_id', orgId);
+                }
+                const { data: employees } = await profileQuery;
+
                 // Fetch real attendance data
                 const todayStr = new Date().toISOString().split('T')[0];
-                const { data: attendanceData } = await supabase
+                let attendanceQuery = supabase
                     .from('attendance')
                     .select('employee_id, clock_in, clock_out')
                     .eq('date', todayStr);
 
+                if (orgId) {
+                    attendanceQuery = attendanceQuery.eq('org_id', orgId);
+                }
+                const { data: attendanceData } = await attendanceQuery;
+
                 // Fetch approved leaves for today (Absent)
-                const { data: leavesData } = await supabase
+                let leavesQuery = supabase
                     .from('leaves')
                     .select('id')
                     .eq('status', 'approved')
                     .lte('from_date', todayStr)
                     .gte('to_date', todayStr);
+
+                if (orgId) {
+                    leavesQuery = leavesQuery.eq('org_id', orgId);
+                }
+                const { data: leavesData } = await leavesQuery;
 
                 if (employees) {
                     setAllEmployees(employees);
@@ -108,9 +123,14 @@ const DashboardHome = () => {
                 // Fetch teams for analytics
                 // Fetch tasks for stats and analytics
                 // Fetch tasks for stats and analytics AND timeline
-                const { data: tasks } = await supabase
+                let tasksQuery = supabase
                     .from('tasks')
                     .select('id, status, assigned_to, title, due_date, priority');
+
+                if (orgId) {
+                    tasksQuery = tasksQuery.eq('org_id', orgId);
+                }
+                const { data: tasks } = await tasksQuery;
 
                 if (tasks) {
                     setTaskStats({
@@ -121,9 +141,14 @@ const DashboardHome = () => {
                 }
 
                 // Fetch announcements
-                const { data: eventsData } = await supabase
+                let annQuery = supabase
                     .from('announcements')
-                    .select('*')
+                    .select('*');
+
+                if (orgId) {
+                    annQuery = annQuery.eq('org_id', orgId);
+                }
+                const { data: eventsData } = await annQuery
                     .order('event_time', { ascending: true });
 
                 let combinedEvents = [];
@@ -179,9 +204,14 @@ const DashboardHome = () => {
                 setTimeline(combinedEvents);
 
                 // Fetch projects for analytics
-                const { data: projectsData } = await supabase
+                let projectsQuery = supabase
                     .from('projects')
                     .select('id, name');
+
+                if (orgId) {
+                    projectsQuery = projectsQuery.eq('org_id', orgId);
+                }
+                const { data: projectsData } = await projectsQuery;
 
                 const projects = projectsData ? projectsData.map(p => ({ id: p.id, name: p.name })) : [];
 
@@ -609,7 +639,7 @@ const DashboardHome = () => {
                         </div>
                     </div>
 
-                    <NotesTile />
+                    {orgConfig?.features?.showNotes && <NotesTile />}
                 </div>
 
                 {/* Right Column (4 columns) */}

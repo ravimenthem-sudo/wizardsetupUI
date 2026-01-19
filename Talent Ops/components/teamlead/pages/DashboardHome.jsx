@@ -14,7 +14,7 @@ import AttendanceTracker from '../components/Dashboard/AttendanceTracker';
 
 const DashboardHome = () => {
     const { addToast } = useToast();
-    const { userName, currentTeam, teamId } = useUser();
+    const { userName, currentTeam, teamId, orgId, orgConfig } = useUser();
     const navigate = useNavigate();
 
     // Helper to format date as YYYY-MM-DD for comparison (Local Time)
@@ -97,9 +97,14 @@ const DashboardHome = () => {
                 setTeamLeadProfile(profile);
 
                 // Fetch All Employees for Event Selection
-                const { data: allEmps } = await supabase
+                let allEmpQuery = supabase
                     .from('profiles')
                     .select('id, full_name, team_id');
+
+                if (orgId) {
+                    allEmpQuery = allEmpQuery.eq('org_id', orgId);
+                }
+                const { data: allEmps } = await allEmpQuery;
 
                 if (allEmps) {
                     setAllOrgEmployees(allEmps);
@@ -126,10 +131,15 @@ const DashboardHome = () => {
                         const today = new Date().toISOString().split('T')[0];
 
                         // Fetch attendance for today
-                        const { data: attendance } = await supabase
+                        let attQuery = supabase
                             .from('attendance')
                             .select('*')
                             .eq('date', today);
+
+                        if (orgId) {
+                            attQuery = attQuery.eq('org_id', orgId);
+                        }
+                        const { data: attendance } = await attQuery;
 
                         const attendanceMap = {};
                         if (attendance) {
@@ -139,12 +149,17 @@ const DashboardHome = () => {
                         }
 
                         // Fetch approved leaves for today
-                        const { data: leaves } = await supabase
+                        let leavesQuery = supabase
                             .from('leaves')
                             .select('employee_id')
                             .eq('status', 'approved')
                             .lte('from_date', today)
                             .gte('to_date', today);
+
+                        if (orgId) {
+                            leavesQuery = leavesQuery.eq('org_id', orgId);
+                        }
+                        const { data: leaves } = await leavesQuery;
 
                         const leaveSet = new Set(leaves?.map(l => l.employee_id));
 
@@ -207,9 +222,14 @@ const DashboardHome = () => {
                         });
 
                         // Fetch Announcements & Update Timeline
-                        const { data: eventsData } = await supabase
+                        let annQuery = supabase
                             .from('announcements')
-                            .select('*')
+                            .select('*');
+
+                        if (orgId) {
+                            annQuery = annQuery.eq('org_id', orgId);
+                        }
+                        const { data: eventsData } = await annQuery
                             .order('event_time', { ascending: true });
 
                         let combinedEvents = [];
@@ -291,12 +311,17 @@ const DashboardHome = () => {
                 const currentYear = new Date().getFullYear();
 
                 // Get attendance records for current month
-                const { data: attendanceData } = await supabase
+                let myAttQuery = supabase
                     .from('attendance')
                     .select('*')
                     .eq('employee_id', user.id)
                     .gte('date', `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`)
                     .lte('date', `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`);
+
+                if (orgId) {
+                    myAttQuery = myAttQuery.eq('org_id', orgId);
+                }
+                const { data: attendanceData } = await myAttQuery;
 
                 const presentDays = attendanceData ? attendanceData.filter(a => a.clock_in).length : 0;
 
@@ -606,7 +631,7 @@ const DashboardHome = () => {
 
                     <AttendanceTracker />
 
-                    <NotesTile />
+                    {orgConfig?.features?.showNotes !== false && <NotesTile />}
                 </div>
 
                 {/* Right Side: Calendar & Timeline */}

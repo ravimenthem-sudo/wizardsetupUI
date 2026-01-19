@@ -27,26 +27,25 @@ const CompletionScreen: React.FC = () => {
             </p>
 
             <p className="font-body text-sm text-graphite-light leading-relaxed mb-16 opacity-80">
-                We've successfully configured Your TalentOps workspace based on your specific needs.
-                Your system is now optimized for your selected modules and features.
+                Setup is complete! Your TalentOps workspace has been successfully configured.
+                <br /><br />
+                Credentials for the **Executive dashboard** will be shared with you separately.
+                Please use those details to access your workspace.
             </p>
 
             <div className="flex flex-col md:flex-row gap-4 items-center">
                 <button
-                    onClick={() => navigate('/executive-dashboard/dashboard')}
+                    onClick={async () => {
+                        const { supabase } = await import('@/lib/supabaseClient');
+                        await supabase.auth.signOut();
+                        navigate('/login');
+                    }}
                     className="flex items-center gap-4 bg-ink text-paper font-accent text-[10px] font-bold tracking-[0.2em] uppercase px-12 py-5 rounded-full hover:bg-accent-violet transition-all duration-300 shadow-xl group"
                 >
-                    Go to Dashboard
+                    Return to Login
                     <motion.span animate={{ x: [0, 4, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>
                         →
                     </motion.span>
-                </button>
-
-                <button
-                    className="flex items-center gap-3 bg-white text-ink border border-mist/30 font-accent text-[10px] font-bold tracking-[0.2em] uppercase px-12 py-5 rounded-full hover:border-accent-violet transition-all duration-300"
-                >
-                    <Users size={14} className="opacity-40" />
-                    Invite Team
                 </button>
             </div>
         </div>

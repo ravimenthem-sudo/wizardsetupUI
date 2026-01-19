@@ -6,17 +6,23 @@ import {
     Wallet,
     UserCheck,
     PieChart,
-    Mail
+    Mail,
+    Network,
+    StickyNote,
+    FolderSync
 } from 'lucide-react';
 import SelectionCard from '@/components/wizard/ui/SelectionCard';
 
 const ALL_FEATURES = [
-    { id: 'payslip', title: 'Payslip Generator', description: 'Enables: \"Payslips\" menu for employees to view salary slips.', icon: FileText, module: 'payroll' },
-    { id: 'leaves', title: 'Leave Approvals', description: 'Enables: \"Leave Requests\" and \"My Leaves\" menus.', icon: Calendar, module: 'attendance' },
-    { id: 'reports', title: 'Reports & Analytics', description: 'Enables: \"Analytics\" menu for data insights.', icon: PieChart, module: 'any' },
-    { id: 'ess', title: 'Employee Self-Service', description: 'Enables: \"Employee Status\" (Attendance) and Profile editing.', icon: UserCheck, module: 'hr' },
-    { id: 'claims', title: 'Expense Claims', description: 'Enables: \"Invoice\" and Expense management menus.', icon: Wallet, module: 'finance' },
-    { id: 'tasks_tracking', title: 'Progress Tracking', description: 'Enables: Detailed task progress bars and status updates.', icon: BarChart2, module: 'tasks' },
+    { id: 'payslip', title: 'Payslip Generator', description: 'Enables: "Payslips" menu for employees to view salary slips.', icon: FileText, module: 'payroll' },
+    { id: 'leaves', title: 'Leave Approvals', description: 'Enables: "Leave Requests" and "My Leaves" menus.', icon: Calendar, module: 'attendance' },
+    { id: 'reports', title: 'Reports & Analytics', description: 'Enables: "Analytics" menu for data insights.', icon: PieChart, module: 'performance' },
+    { id: 'ess', title: 'Employee Self-Service', description: 'Enables: "Employee Status" (Attendance) and Profile editing.', icon: UserCheck, module: 'hr' },
+    { id: 'invoice', title: 'Invoice Billing', description: 'Enables: "Invoice" and Expense management menus.', icon: Wallet, module: 'finance' },
+    { id: 'tracking', title: 'Progress Tracking', description: 'Enables: Detailed task progress bars and status updates.', icon: BarChart2, module: 'tasks' },
+    { id: 'org_chart', title: 'Org Hierarchy', description: 'Enables: Visual organization chart and reporting lines.', icon: Network, module: 'hr' },
+    { id: 'showNotes', title: 'Dashboard Notes', description: 'Enables: "Notes & immediate tasks" tile on the dashboard.', icon: StickyNote, module: 'any' },
+    { id: 'documents', title: 'Document Vault', description: 'Enables: "Project Documents" and centralized file storage.', icon: FolderSync, module: 'tasks' },
     { id: 'email', title: 'Email Notifications', description: 'Enables: System-wide email alerts (Backend feature).', icon: Mail, module: 'any' },
 ];
 

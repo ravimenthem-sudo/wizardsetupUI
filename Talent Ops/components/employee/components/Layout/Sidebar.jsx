@@ -26,12 +26,16 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useProject } from '../../context/ProjectContext';
 import { useMessages } from '../../../shared/context/MessageContext';
+import { useUser } from '../../context/UserContext'; // Added useUser
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const { currentProject, setCurrentProject, userProjects, projectRole } = useProject();
     const { unreadCount } = useMessages();
+    const { orgConfig } = useUser(); // Added orgConfig
+    const enabledModules = orgConfig?.modules || []; // Added enabledModules
+    const enabledFeatures = orgConfig?.features || []; // Added enabledFeatures
 
     const [expandedMenus, setExpandedMenus] = useState({
         organization: true,
@@ -47,18 +51,22 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
         }));
     };
 
-    // Organization-level menu items (same for all roles)
     const orgMenuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/employee-dashboard/dashboard' },
-        { icon: UserCheck, label: 'My Attendance', path: '/employee-dashboard/team-status' },
-        { icon: CalendarOff, label: 'Leaves', path: '/employee-dashboard/leaves' },
-        { icon: Receipt, label: 'Payslip', path: '/employee-dashboard/payslips' },
-        { icon: FileText, label: 'Policies', path: '/employee-dashboard/policies' },
-        { icon: Megaphone, label: 'Announcements', path: '/employee-dashboard/announcements' },
-        { icon: MessageCircle, label: 'Messages', path: '/employee-dashboard/messages' },
-        { icon: Network, label: 'Org Hierarchy', path: '/employee-dashboard/org-hierarchy' },
-        { icon: Ticket, label: 'Raise a Ticket', path: '/employee-dashboard/raise-ticket' },
+        { icon: UserCheck, label: 'My Attendance', path: '/employee-dashboard/team-status', module: 'attendance' },
+        { icon: CalendarOff, label: 'Leaves', path: '/employee-dashboard/leaves', module: 'attendance', feature: 'leaves' },
+        { icon: Receipt, label: 'Payslip', path: '/employee-dashboard/payslips', module: 'payroll', feature: 'payslip' },
+        { icon: FileText, label: 'Policies', path: '/employee-dashboard/policies', module: 'hr' },
+        { icon: Megaphone, label: 'Announcements', path: '/employee-dashboard/announcements', module: 'hr' },
+        { icon: MessageCircle, label: 'Messages', path: '/employee-dashboard/messages', module: 'messaging' },
+        { icon: Network, label: 'Org Hierarchy', path: '/employee-dashboard/org-hierarchy', module: 'hr', feature: 'org_chart' },
+        { icon: Ticket, label: 'Raise a Ticket', path: '/employee-dashboard/raise-ticket', module: 'helpdesk' },
     ];
+
+    const filteredOrgItems = orgMenuItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Role-based project menu configurations
     const projectMenusByRole = {
@@ -97,7 +105,11 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
     };
 
     // Get menu items based on current project role
-    const projectMenuItems = projectMenusByRole[projectRole] || projectMenusByRole.consultant;
+    const rawProjectItems = projectMenusByRole[projectRole] || projectMenusByRole.consultant;
+    const projectMenuItems = rawProjectItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Role badge colors
     const getRoleBadge = (role) => {
@@ -309,12 +321,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
                 {renderSectionHeader(Building2, 'Organization', 'organization')}
                 {expandedMenus.organization && !isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
                 {isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
 

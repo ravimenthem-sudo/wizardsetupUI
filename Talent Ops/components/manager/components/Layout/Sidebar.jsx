@@ -28,6 +28,7 @@ import {
 import { useProject } from '../../../employee/context/ProjectContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMessages } from '../../../shared/context/MessageContext';
+import { useUser } from '../../context/UserContext';
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
@@ -40,6 +41,9 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
 
     const { currentProject, setCurrentProject, userProjects, projectRole } = useProject();
     const { unreadCount } = useMessages();
+    const { orgConfig } = useUser();
+    const enabledModules = orgConfig?.modules || [];
+    const enabledFeatures = orgConfig?.features || []; // Added enabledFeatures
     const [showProjectPicker, setShowProjectPicker] = useState(false);
 
     const getRoleBadge = (role) => {
@@ -61,55 +65,64 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
     // Organization-level menu items
     const orgMenuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/manager-dashboard/dashboard' },
-        { icon: ListTodo, label: 'All Tasks', path: '/manager-dashboard/global-tasks' },
-        { icon: UserCheck, label: 'Employee Status', path: '/manager-dashboard/employee-status' },
-        { icon: CalendarOff, label: 'Leave Requests', path: '/manager-dashboard/leaves' },
-        { icon: CalendarOff, label: 'My Leaves', path: '/manager-dashboard/my-leaves' },
-        { icon: DollarSign, label: 'Payroll', path: '/manager-dashboard/payroll' },
-        { icon: Receipt, label: 'Payslips', path: '/manager-dashboard/payslips' },
-        { icon: Network, label: 'Org Hierarchy', path: '/manager-dashboard/hierarchy' },
-        { icon: Megaphone, label: 'Announcements', path: '/manager-dashboard/announcements' },
-        { icon: MessageCircle, label: 'Messages', path: '/manager-dashboard/messages' },
-        { icon: FileCheck, label: 'Policies', path: '/manager-dashboard/policies' },
-        { icon: Ticket, label: 'Raise a Ticket', path: '/manager-dashboard/raise-ticket' },
+        { icon: ListTodo, label: 'All Tasks', path: '/manager-dashboard/global-tasks', module: 'tasks' },
+        { icon: UserCheck, label: 'Employee Status', path: '/manager-dashboard/employee-status', module: 'attendance' },
+        { icon: CalendarOff, label: 'Leave Requests', path: '/manager-dashboard/leaves', module: 'hr', feature: 'leaves' },
+        { icon: CalendarOff, label: 'My Leaves', path: '/manager-dashboard/my-leaves', module: 'hr', feature: 'leaves' },
+        { icon: DollarSign, label: 'Payroll', path: '/manager-dashboard/payroll', module: 'payroll' },
+        { icon: Receipt, label: 'Payslips', path: '/manager-dashboard/payslips', module: 'payroll', feature: 'payslip' },
+        { icon: Network, label: 'Org Hierarchy', path: '/manager-dashboard/hierarchy', module: 'hr', feature: 'org_chart' },
+        { icon: Megaphone, label: 'Announcements', path: '/manager-dashboard/announcements', module: 'hr' },
+        { icon: MessageCircle, label: 'Messages', path: '/manager-dashboard/messages', module: 'messaging' },
+        { icon: FileCheck, label: 'Policies', path: '/manager-dashboard/policies', module: 'hr' },
+        { icon: Ticket, label: 'Raise a Ticket', path: '/manager-dashboard/raise-ticket', module: 'helpdesk' },
     ];
+
+    const filteredOrgItems = orgMenuItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Role-based project menu configurations
     const projectMenusByRole = {
         consultant: [
             { icon: Users, label: 'Team Members', path: '/manager-dashboard/employees' },
-            { icon: FileText, label: 'Project Documents', path: '/manager-dashboard/documents' },
-            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks' },
-            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics' },
-            { icon: Network, label: 'Hierarchy', path: '/manager-dashboard/project-hierarchy' },
+            { icon: FileText, label: 'Project Documents', path: '/manager-dashboard/documents', module: 'tasks' },
+            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks', module: 'tasks' },
+            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics', module: 'performance' },
+            { icon: Network, label: 'Hierarchy', path: '/manager-dashboard/project-hierarchy', module: 'tasks' },
         ],
         employee: [
             { icon: Users, label: 'Team Members', path: '/manager-dashboard/employees' },
-            { icon: FileText, label: 'Project Documents', path: '/manager-dashboard/documents' },
-            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks' },
-            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics' },
-            { icon: Network, label: 'Hierarchy', path: '/manager-dashboard/project-hierarchy' },
+            { icon: FileText, label: 'Project Documents', path: '/manager-dashboard/documents', module: 'tasks' },
+            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks', module: 'tasks' },
+            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics', module: 'performance' },
+            { icon: Network, label: 'Hierarchy', path: '/manager-dashboard/project-hierarchy', module: 'tasks' },
         ],
         team_lead: [
             { icon: Users, label: 'Team Members', path: '/manager-dashboard/employees' },
-            { icon: ListTodo, label: 'All Project Tasks', path: '/manager-dashboard/tasks' },
-            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks' },
-            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics' },
-            { icon: Network, label: 'Hierarchy', path: '/manager-dashboard/project-hierarchy' },
-            { icon: FileText, label: 'Documents', path: '/manager-dashboard/documents' },
+            { icon: ListTodo, label: 'All Project Tasks', path: '/manager-dashboard/tasks', module: 'tasks' },
+            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks', module: 'tasks' },
+            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics', module: 'performance' },
+            { icon: Network, label: 'Hierarchy', path: '/manager-dashboard/project-hierarchy', module: 'tasks' },
+            { icon: FileText, label: 'Documents', path: '/manager-dashboard/documents', module: 'tasks' },
         ],
         manager: [
             { icon: Users, label: 'Team Members', path: '/manager-dashboard/employees' },
-            { icon: ListTodo, label: 'All Project Tasks', path: '/manager-dashboard/tasks' },
-            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks' },
-            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics' },
-            { icon: Network, label: 'Project Hierarchy', path: '/manager-dashboard/project-hierarchy' },
-            { icon: FileText, label: 'Documents', path: '/manager-dashboard/documents' },
+            { icon: ListTodo, label: 'All Project Tasks', path: '/manager-dashboard/tasks', module: 'tasks' },
+            { icon: User, label: 'My Tasks', path: '/manager-dashboard/personal-tasks', module: 'tasks' },
+            { icon: BarChart2, label: 'Analytics', path: '/manager-dashboard/analytics', module: 'performance' },
+            { icon: Network, label: 'Project Hierarchy', path: '/manager-dashboard/project-hierarchy', module: 'tasks' },
+            { icon: FileText, label: 'Documents', path: '/manager-dashboard/documents', module: 'tasks' },
         ]
     };
 
     // Get menu items based on current project role
-    const projectMenuItems = projectMenusByRole[projectRole] || projectMenusByRole.consultant;
+    const rawProjectItems = projectMenusByRole[projectRole] || projectMenusByRole.consultant;
+    const projectMenuItems = rawProjectItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Menu item renderer
     const renderMenuItem = (item, index, keyPrefix) => {
@@ -300,12 +313,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
                 {renderSectionHeader(Building2, 'Organization', 'organization')}
                 {expandedMenus.organization && !isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
                 {isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
 

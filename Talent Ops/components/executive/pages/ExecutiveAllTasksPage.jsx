@@ -39,7 +39,8 @@ const ExecutiveAllTasksPage = () => {
                     const { data: tasks } = await supabase
                         .from('tasks')
                         .select('id, status')
-                        .eq('project_id', project.id);
+                        .eq('project_id', project.id)
+                        .eq('org_id', orgId);
 
                     counts[project.id] = {
                         total: tasks?.length || 0,

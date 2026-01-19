@@ -13,6 +13,7 @@ export const UserProvider = ({ children }) => {
     const [lastActive, setLastActive] = useState('Now');
     const [userId, setUserId] = useState(null);
     const [orgId, setOrgId] = useState(null);
+    const [orgConfig, setOrgConfig] = useState(null);
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -41,6 +42,19 @@ export const UserProvider = ({ children }) => {
                         setUserName(profile.full_name || profile.email || 'User');
                         setUserRole(profile.role || 'User');
                         setOrgId(profile.org_id);
+
+                        // Fetch Organization extra details (modules, features)
+                        if (profile.org_id) {
+                            const { data: orgData } = await supabase
+                                .from('orgs')
+                                .select('modules, features, permissions')
+                                .eq('id', profile.org_id)
+                                .single();
+
+                            if (orgData) {
+                                setOrgConfig(orgData);
+                            }
+                        }
                     }
                 } else {
                     setUserName('Guest');
@@ -66,6 +80,7 @@ export const UserProvider = ({ children }) => {
             userRole, setUserRole,
             userId,
             orgId,
+            orgConfig,
             userStatus, setUserStatus,
             userTask, setUserTask,
             lastActive, setLastActive

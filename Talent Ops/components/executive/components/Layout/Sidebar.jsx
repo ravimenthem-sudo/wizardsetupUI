@@ -27,11 +27,15 @@ import {
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMessages } from '../../../shared/context/MessageContext';
+import { useUser } from '../../context/UserContext';
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const { unreadCount } = useMessages();
+    const { orgConfig } = useUser();
+    const enabledModules = orgConfig?.modules || [];
+    const enabledFeatures = orgConfig?.features || []; // Added enabledFeatures
 
     const [expandedMenus, setExpandedMenus] = useState({
         organization: true,
@@ -49,29 +53,39 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
     // Organization-level menu items (Org Manager stuff)
     const orgMenuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/executive-dashboard/dashboard' },
-        { icon: Users, label: 'Employees', path: '/executive-dashboard/employees' },
-        { icon: UserCheck, label: 'Employee Status', path: '/executive-dashboard/employee-status' },
-        { icon: CalendarOff, label: 'Leave Requests', path: '/executive-dashboard/leaves' },
-        { icon: DollarSign, label: 'Payroll', path: '/executive-dashboard/payroll' },
-        { icon: Receipt, label: 'Payslips', path: '/executive-dashboard/payslips' },
-        { icon: FileText, label: 'Invoice', path: '/executive-dashboard/invoice' },
-        { icon: Briefcase, label: 'Hiring Portal', path: '/executive-dashboard/hiring' },
-        { icon: Network, label: 'Org Hierarchy', path: '/executive-dashboard/hierarchy' },
-        { icon: Megaphone, label: 'Announcements', path: '/executive-dashboard/announcements' },
-        { icon: MessageCircle, label: 'Messages', path: '/executive-dashboard/messages' },
-        { icon: FileCheck, label: 'Policies', path: '/executive-dashboard/policies' },
-        { icon: Ticket, label: 'Raise a Ticket', path: '/executive-dashboard/raise-ticket' },
+        { icon: Users, label: 'Employees', path: '/executive-dashboard/employees', module: 'hr' },
+        { icon: UserCheck, label: 'Employee Status', path: '/executive-dashboard/employee-status', module: 'attendance' },
+        { icon: CalendarOff, label: 'Leave Requests', path: '/executive-dashboard/leaves', module: 'hr', feature: 'leaves' },
+        { icon: DollarSign, label: 'Payroll', path: '/executive-dashboard/payroll', module: 'payroll' },
+        { icon: Receipt, label: 'Payslips', path: '/executive-dashboard/payslips', module: 'payroll', feature: 'payslip' },
+        { icon: FileText, label: 'Invoice', path: '/executive-dashboard/invoice', module: 'finance', feature: 'invoice' },
+        { icon: Briefcase, label: 'Hiring Portal', path: '/executive-dashboard/hiring', module: 'hiring' },
+        { icon: Network, label: 'Org Hierarchy', path: '/executive-dashboard/hierarchy', module: 'hr', feature: 'org_chart' },
+        { icon: Megaphone, label: 'Announcements', path: '/executive-dashboard/announcements', module: 'hr' },
+        { icon: MessageCircle, label: 'Messages', path: '/executive-dashboard/messages', module: 'messaging' }, // Added module: 'messaging'
+        { icon: FileCheck, label: 'Policies', path: '/executive-dashboard/policies', module: 'hr' },
+        { icon: Ticket, label: 'Raise a Ticket', path: '/executive-dashboard/raise-ticket', module: 'helpdesk' },
     ];
+
+    const filteredOrgItems = orgMenuItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Project-level menu items (Project Manager stuff)
     const projectMenuItems = [
-        { icon: FolderOpen, label: 'Projects', path: '/executive-dashboard/projects' },
-        { icon: ListTodo, label: 'Tasks', path: '/executive-dashboard/tasks' },
-        { icon: BarChart2, label: 'Analytics', path: '/executive-dashboard/analytics' },
-        { icon: TrendingUp, label: 'Project Analytics', path: '/executive-dashboard/project-analytics' },
-        { icon: Network, label: 'Project Hierarchy', path: '/executive-dashboard/project-hierarchy' },
-        { icon: FileText, label: 'Documents', path: '/executive-dashboard/documents' },
+        { icon: FolderOpen, label: 'Projects', path: '/executive-dashboard/projects', module: 'tasks' },
+        { icon: ListTodo, label: 'Tasks', path: '/executive-dashboard/tasks', module: 'tasks' },
+        { icon: BarChart2, label: 'Analytics', path: '/executive-dashboard/analytics', module: 'performance' },
+        { icon: TrendingUp, label: 'Project Analytics', path: '/executive-dashboard/project-analytics', module: 'performance' },
+        { icon: Network, label: 'Project Hierarchy', path: '/executive-dashboard/project-hierarchy', module: 'tasks' },
+        { icon: FileText, label: 'Documents', path: '/executive-dashboard/documents', module: 'tasks', feature: 'documents' },
     ];
+
+    const filteredProjItems = projectMenuItems.filter(item =>
+        (!item.module || enabledModules.includes(item.module)) &&
+        (!item.feature || enabledFeatures.includes(item.feature))
+    );
 
     // Menu item renderer
     const renderMenuItem = (item, index, keyPrefix) => {
@@ -260,12 +274,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
                 {renderSectionHeader(Building2, 'Organization', 'organization')}
                 {expandedMenus.organization && !isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
                 {isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '8px' }}>
-                        {orgMenuItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
+                        {filteredOrgItems.map((item, idx) => renderMenuItem(item, idx, 'org'))}
                     </div>
                 )}
 
@@ -273,12 +287,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onMouseEnter, onMouseLeave }) => 
                 {renderSectionHeader(FolderKanban, 'Project', 'project')}
                 {expandedMenus.project && !isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {projectMenuItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
+                        {filteredProjItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
                     </div>
                 )}
                 {isCollapsed && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {projectMenuItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
+                        {filteredProjItems.map((item, idx) => renderMenuItem(item, idx, 'proj'))}
                     </div>
                 )}
             </nav>

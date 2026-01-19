@@ -12,7 +12,7 @@ import { supabase } from '../../../lib/supabaseClient';
 
 const DashboardHome = () => {
     const { addToast } = useToast();
-    const { userName, currentTeam } = useUser();
+    const { userName, currentTeam, orgId, orgConfig } = useUser();
     const navigate = useNavigate();
 
     // Helper to format date as YYYY-MM-DD for comparison (Local Time)
@@ -57,10 +57,15 @@ const DashboardHome = () => {
 
                 if (user) {
                     // 1. Fetch Attendance (count present/absent days)
-                    const { data: attendance } = await supabase
+                    let attQuery = supabase
                         .from('attendance')
                         .select('*')
                         .eq('employee_id', user.id);
+
+                    if (orgId) {
+                        attQuery = attQuery.eq('org_id', orgId);
+                    }
+                    const { data: attendance } = await attQuery;
 
                     if (attendance) setAttendanceData(attendance);
 
@@ -79,7 +84,12 @@ const DashboardHome = () => {
                     }
 
                     // 4. Fetch All Employees & Team Members
-                    const { data: allEmps, error: empError } = await supabase.from('profiles').select('id, full_name, team_id');
+                    let empQuery = supabase.from('profiles').select('id, full_name, team_id');
+
+                    if (orgId) {
+                        empQuery = empQuery.eq('org_id', orgId);
+                    }
+                    const { data: allEmps, error: empError } = await empQuery;
 
                     if (empError) console.error("Error fetching employees:", empError);
 
@@ -95,9 +105,14 @@ const DashboardHome = () => {
 
                     // Tasks were removed from consultant view, so no task events
 
-                    const { data: announcements } = await supabase
+                    let annQuery = supabase
                         .from('announcements')
                         .select('*');
+
+                    if (orgId) {
+                        annQuery = annQuery.eq('org_id', orgId);
+                    }
+                    const { data: announcements } = await annQuery;
 
                     if (announcements && profileData) {
                         const filteredAnnouncements = announcements.filter(a => {
@@ -433,10 +448,9 @@ const DashboardHome = () => {
                                 <p style={{ color: '#94a3b8', fontSize: '0.9rem', fontWeight: 500 }}>Notes & immediate tasks for today</p>
                             </div>
                             <div style={{ padding: '10px', backgroundColor: '#f0f9ff', borderRadius: '14px', color: '#0ea5e9' }}>
-                                <Star size={20} fill="currentColor" />
                             </div>
                         </div>
-                        <NotesTile />
+                        {orgConfig?.features?.showNotes !== false && <NotesTile />}
                     </div>
                 </div>
 

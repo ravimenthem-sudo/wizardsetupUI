@@ -11,8 +11,7 @@ interface Props {
 
 const ROLES = [
     { id: 'admin', label: 'Admin', sub: 'Default Admin access' },
-    { id: 'manager', label: 'Manager', sub: 'Default Manager access' },
-    { id: 'employee', label: 'Employee', sub: 'Default Employee access' }
+    { id: 'manager', label: 'Manager', sub: 'Default Manager access' }
 ];
 
 const PERMS = ['VIEW', 'CREATE', 'APPROVE', 'MANAGE'];
